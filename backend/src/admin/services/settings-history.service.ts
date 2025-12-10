@@ -95,7 +95,7 @@ export class SettingsHistoryService {
     // Update the setting to old value
     await this.prisma.systemSetting.update({
       where: { key: history.key },
-      data: { value: history.oldValue },
+      data: { value: history.oldValue as object },
     });
 
     return history;

@@ -81,18 +81,6 @@ export class CleanupService implements OnModuleInit {
     };
   }
 
-  // Clean up orphaned artifacts
-  async cleanupOrphanedArtifacts() {
-    const result = await this.prisma.artifact.deleteMany({
-      where: {
-        task: null,
-      },
-    });
-
-    this.logger.log(`Cleaned up ${result.count} orphaned artifacts`);
-    return result.count;
-  }
-
   // Reset team usage counters (run monthly)
   @Cron('0 0 1 * *') // First day of each month
   async resetTeamUsage() {
@@ -112,3 +100,4 @@ export class CleanupService implements OnModuleInit {
     });
   }
 }
+
