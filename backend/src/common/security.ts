@@ -217,3 +217,102 @@ export class PathValidator {
     return { valid: true };
   }
 }
+
+// Admin Rate Limit decorator
+export const ADMIN_RATE_LIMIT_KEY = 'adminRateLimit';
+
+export function AdminRateLimit(limit: number = 200) {
+  return (target: any, key?: string, descriptor?: PropertyDescriptor) => {
+    Reflect.defineMetadata(ADMIN_RATE_LIMIT_KEY, { limit, windowMs: 60000 }, descriptor?.value || target);
+    return descriptor || target;
+  };
+}
+
+// IP Access Control Guard
+const blockedIPs = new Set<string>();
+const ipAccessLog = new Map<string, { count: number; lastAccess: number }>();
+
+@Injectable()
+export class IPAccessGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    const ip = this.getClientIP(request);
+
+    // Check if IP is blocked
+    if (blockedIPs.has(ip)) {
+      throw new HttpException(
+        { statusCode: HttpStatus.FORBIDDEN, message: 'Access denied' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    // Track IP access for anomaly detection
+    const now = Date.now();
+    const record = ipAccessLog.get(ip);
+
+    if (record) {
+      // Reset if window passed
+      if (now - record.lastAccess > 60000) {
+        ipAccessLog.set(ip, { count: 1, lastAccess: now });
+      } else {
+        record.count++;
+        record.lastAccess = now;
+
+        // Auto-block if too many requests (500+ per minute)
+        if (record.count > 500) {
+          blockedIPs.add(ip);
+          throw new HttpException(
+            { statusCode: HttpStatus.TOO_MANY_REQUESTS, message: 'Too many requests, IP blocked' },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+      }
+    } else {
+      ipAccessLog.set(ip, { count: 1, lastAccess: now });
+    }
+
+    return true;
+  }
+
+  private getClientIP(request: any): string {
+    return (
+      request.headers['x-forwarded-for']?.split(',')[0] ||
+      request.headers['x-real-ip'] ||
+      request.ip ||
+      request.connection?.remoteAddress ||
+      'unknown'
+    );
+  }
+
+  // Static methods for IP management
+  static blockIP(ip: string) {
+    blockedIPs.add(ip);
+  }
+
+  static unblockIP(ip: string) {
+    blockedIPs.delete(ip);
+  }
+
+  static getBlockedIPs(): string[] {
+    return Array.from(blockedIPs);
+  }
+
+  static isBlocked(ip: string): boolean {
+    return blockedIPs.has(ip);
+  }
+}
+
+// Session timeout checker (for JWT tokens)
+export class SessionTimeoutChecker {
+  static readonly IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+  static isSessionExpired(lastActivity: number): boolean {
+    return Date.now() - lastActivity > this.IDLE_TIMEOUT_MS;
+  }
+
+  static getRemainingTime(lastActivity: number): number {
+    const remaining = this.IDLE_TIMEOUT_MS - (Date.now() - lastActivity);
+    return Math.max(0, remaining);
+  }
+}
+

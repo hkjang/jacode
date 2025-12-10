@@ -21,22 +21,42 @@ model User {
   name      String
   avatar    String?
   role      UserRole @default(USER)
+  status    UserStatus @default(ACTIVE)
   
   preferences Json @default("{}")
+  permissions String[] @default([]) // 세분화된 권한
+  
+  lastLoginAt DateTime?
+  blockedAt   DateTime?
+  blockedReason String?
+  
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id])
   
   projects         Project[]
   agentTasks       AgentTask[]
   knowledgeEntries KnowledgeEntry[]
+  usageLogs        UsageLog[]
+  activityLogs     ActivityLog[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([teamId])
+  @@index([status])
   @@map("users")
 }
 
 enum UserRole {
   USER
+  EDITOR
   ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
 }
 
 // ============================================================================
@@ -324,3 +344,292 @@ model AIModelSetting {
 
   @@map("ai_model_settings")
 }
+
+// ============================================================================
+// Admin: Team Management
+// ============================================================================
+
+model Team {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  
+  usageLimit     Int @default(10000) // 월간 토큰 사용량 제한
+  currentUsage   Int @default(0)
+  
+  members User[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("teams")
+}
+
+// ============================================================================
+// Admin: Model Server Management
+// ============================================================================
+
+model ModelServer {
+  id       String @id @default(uuid())
+  name     String @unique
+  type     ServerType
+  url      String
+  
+  maxTokens    Int     @default(4096)
+  device       String  @default("auto") // cuda, cpu, auto
+  status       ServerStatus @default(UNKNOWN)
+  lastHealthCheck DateTime?
+  
+  routingWeight Int @default(100) // 부하 분산 가중치
+  rateLimit     Int @default(100) // 분당 요청 제한
+  
+  settings Json @default("{}")
+  
+  isActive Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("model_servers")
+}
+
+enum ServerType {
+  VLLM
+  OLLAMA
+}
+
+enum ServerStatus {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  UNKNOWN
+}
+
+// ============================================================================
+// Admin: Feature Toggles (바이브코딩 기능 제어)
+// ============================================================================
+
+model FeatureToggle {
+  id          String @id @default(uuid())
+  key         String @unique // smart_context, auto_fix, patch_generation
+  name        String
+  description String?
+  
+  isEnabled Boolean @default(true)
+  
+  settings Json @default("{}") // 기능별 세부 설정
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("feature_toggles")
+}
+
+// ============================================================================
+// Admin: Prompt Template Management
+// ============================================================================
+
+model PromptTemplate {
+  id          String @id @default(uuid())
+  name        String @unique
+  type        PromptType
+  description String?
+  
+  content     String @db.Text
+  variables   String[] // {{variable}} 형태의 변수 목록
+  
+  version     Int @default(1)
+  isActive    Boolean @default(true)
+  
+  versions PromptTemplateVersion[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("prompt_templates")
+}
+
+model PromptTemplateVersion {
+  id        String @id @default(uuid())
+  version   Int
+  content   String @db.Text
+  changeLog String?
+  
+  templateId String
+  template   PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@index([templateId])
+  @@map("prompt_template_versions")
+}
+
+enum PromptType {
+  SYSTEM
+  CODE_GENERATION
+  CODE_REVIEW
+  BUG_FIX
+  REFACTORING
+  DOCUMENTATION
+  CUSTOM
+}
+
+// ============================================================================
+// Admin: Usage & Activity Logs
+// ============================================================================
+
+model UsageLog {
+  id        String @id @default(uuid())
+  
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  modelName  String
+  provider   String
+  feature    String // code_generation, auto_fix, explain 등
+  
+  promptTokens     Int @default(0)
+  completionTokens Int @default(0)
+  totalTokens      Int @default(0)
+  
+  responseTimeMs Int @default(0)
+  success        Boolean @default(true)
+  errorMessage   String?
+  
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([modelName])
+  @@index([feature])
+  @@map("usage_logs")
+}
+
+model ActivityLog {
+  id        String @id @default(uuid())
+  
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action    String // login, logout, create_project, etc.
+  resource  String? // 대상 리소스 타입
+  resourceId String?
+  
+  ipAddress String?
+  userAgent String?
+  
+  metadata  Json @default("{}")
+  
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("activity_logs")
+}
+
+model SystemLog {
+  id        String @id @default(uuid())
+  
+  level     LogLevel
+  category  String // api, queue, model, system
+  message   String @db.Text
+  
+  stackTrace String? @db.Text
+  context    Json @default("{}")
+  
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([category])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+// ============================================================================
+// Admin: System Settings
+// ============================================================================
+
+model SystemSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value Json
+  
+  description String?
+  category    String @default("general")
+  
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@map("system_settings")
+}
+
+// ============================================================================
+// Admin: Audit Log (관리자 감사 로그)
+// ============================================================================
+
+model AdminAuditLog {
+  id        String   @id @default(uuid())
+  
+  adminId   String
+  adminEmail String
+  adminName  String
+  
+  action    String   // CREATE, UPDATE, DELETE, READ
+  resource  String   // users, settings, servers, prompts, etc.
+  resourceId String?
+  
+  before    Json?    // 변경 전 값
+  after     Json?    // 변경 후 값
+  
+  ipAddress  String?
+  userAgent  String?
+  
+  status     String @default("SUCCESS") // SUCCESS, FAILED
+  errorMessage String?
+  
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+// ============================================================================
+// Admin: Settings History (설정 변경 이력)
+// ============================================================================
+
+model SettingsHistory {
+  id        String   @id @default(uuid())
+  
+  key       String
+  category  String
+  
+  oldValue  Json
+  newValue  Json
+  
+  changedById String
+  changedByEmail String
+  changedByName  String
+  
+  reason    String?  // 변경 사유
+  
+  createdAt DateTime @default(now())
+
+  @@index([key])
+  @@index([category])
+  @@index([changedById])
+  @@index([createdAt])
+  @@map("settings_history")
+}
+

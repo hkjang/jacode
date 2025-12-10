@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { Request, Response, NextFunction } from 'express';
+import { GlobalExceptionFilter } from './common/exception.filter';
 
 const logger = new Logger('Bootstrap');
 
@@ -10,6 +11,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
+
+  // Global exception filter for standardized error responses
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Global validation pipe with input sanitization
   app.useGlobalPipes(
