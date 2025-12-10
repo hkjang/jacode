@@ -24,10 +24,12 @@ const navItems = [
   { href: '/admin/servers', label: 'Model Servers', icon: Server },
   { href: '/admin/tasks', label: 'Tasks', icon: Activity },
   { href: '/admin/models', label: 'AI Models', icon: Bot },
+  { href: '/admin/queue', label: 'Queue', icon: Activity },
   { href: '/admin/features', label: 'Feature Toggles', icon: Zap },
   { href: '/admin/prompts', label: 'Prompt Templates', icon: FileText },
   { href: '/admin/log-viewer', label: 'System Logs', icon: ScrollText },
   { href: '/admin/audit', label: 'Audit & History', icon: FileSearch },
+  { href: '/admin/backup', label: 'Backup', icon: Shield },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
