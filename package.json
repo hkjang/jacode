@@ -1,0 +1,35 @@
+{
+  "name": "jacode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-Powered Integrated Development Environment",
+  "keywords": [
+    "ai",
+    "ide",
+    "monaco",
+    "agent",
+    "code-generation"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "clean": "pnpm -r run clean",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

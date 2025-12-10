@@ -1,0 +1,326 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// User & Authentication
+// ============================================================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  avatar    String?
+  role      UserRole @default(USER)
+  
+  preferences Json @default("{}")
+  
+  projects         Project[]
+  agentTasks       AgentTask[]
+  knowledgeEntries KnowledgeEntry[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+// ============================================================================
+// Project & Files
+// ============================================================================
+
+model Project {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  rootPath    String  @default("")
+  
+  settings Json @default("{}")
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  files            File[]
+  agentTasks       AgentTask[]
+  snapshots        ProjectSnapshot[]
+  knowledgeEntries KnowledgeEntry[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("projects")
+}
+
+model File {
+  id        String  @id @default(uuid())
+  path      String
+  name      String
+  extension String  @default("")
+  content   String? @db.Text
+  size      Int     @default(0)
+  mimeType  String?
+  isDirectory Boolean @default(false)
+  
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  versions FileVersion[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, path])
+  
+  // Composite indexes for file operations
+  @@index([projectId])                    // List files in project
+  @@index([projectId, isDirectory])       // List directories
+  @@index([projectId, extension])         // Filter by extension
+  @@index([projectId, updatedAt])         // Recent files
+  
+  @@map("files")
+}
+
+model FileVersion {
+  id      String @id @default(uuid())
+  version Int
+  content String @db.Text
+  message String?
+  
+  fileId String
+  file   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  
+  agentTaskId String?
+  
+  createdAt DateTime @default(now())
+
+  // Composite indexes for version queries
+  @@index([fileId])                 // All versions of file
+  @@index([fileId, version])        // Specific version lookup
+  @@index([fileId, createdAt])      // Recent versions
+  
+  @@map("file_versions")
+}
+
+model ProjectSnapshot {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  
+  fileVersionIds String[] // Array of FileVersion IDs
+  
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  agentTaskId String?
+  
+  createdAt DateTime @default(now())
+
+  // Composite indexes
+  @@index([projectId])             // List snapshots in project
+  @@index([projectId, createdAt])  // Recent snapshots
+  
+  @@map("project_snapshots")
+}
+
+// ============================================================================
+// Agent & Tasks
+// ============================================================================
+
+model AgentTask {
+  id       String       @id @default(uuid())
+  type     AgentType
+  status   AgentStatus  @default(PENDING)
+  priority Int          @default(1)
+  
+  prompt      String   @db.Text
+  context     Json     @default("{}")
+  error       String?  @db.Text
+  progress    Int      @default(0)
+  currentStep String?
+  groupId     String?
+  
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  artifacts Artifact[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Single column indexes
+  @@index([projectId])
+  @@index([groupId])
+  
+  // Composite indexes for common query patterns
+  @@index([userId, status])           // Filter by user + status (most common)
+  @@index([userId, status, createdAt]) // User tasks sorted by date
+  @@index([projectId, status])        // Project tasks by status
+  @@index([status, priority])         // Queue processing order
+  @@index([status, createdAt])        // Recent pending tasks
+  
+  @@map("agent_tasks")
+}
+
+enum AgentType {
+  CODE_GENERATION
+  CODE_MODIFICATION
+  CODE_REVIEW
+  TEST_GENERATION
+  REFACTORING
+  BUG_FIX
+  DOCUMENTATION
+}
+
+enum AgentStatus {
+  PENDING
+  PLANNING
+  EXECUTING
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ============================================================================
+// Artifacts
+// ============================================================================
+
+model Artifact {
+  id       String         @id @default(uuid())
+  type     ArtifactType
+  status   ArtifactStatus @default(DRAFT)
+  
+  title    String
+  content  String   @db.Text
+  metadata Json     @default("{}")
+  
+  agentTaskId String
+  agentTask   AgentTask @relation(fields: [agentTaskId], references: [id], onDelete: Cascade)
+  
+  feedback ArtifactFeedback?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Single column index
+  @@index([agentTaskId])
+  
+  // Composite indexes
+  @@index([type, status])          // Filter by type and status
+  @@index([agentTaskId, type])     // Task artifacts by type
+  @@index([status, createdAt])     // Recent artifacts by status
+  
+  @@map("artifacts")
+}
+
+enum ArtifactType {
+  PLAN
+  CODE
+  DIFF
+  TEST_RESULT
+  LOG
+  SCREENSHOT
+  REVIEW
+  DOCUMENTATION
+}
+
+enum ArtifactStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+model ArtifactFeedback {
+  id      String @id @default(uuid())
+  rating  Int?
+  comment String? @db.Text
+  
+  lineComments Json @default("[]") // Array of { line, comment, type }
+  
+  artifactId String   @unique
+  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@map("artifact_feedbacks")
+}
+
+// ============================================================================
+// Knowledge Base (Phase 4)
+// ============================================================================
+
+model KnowledgeEntry {
+  id          String @id @default(uuid())
+  type        String // 'CODE_PATTERN', 'STYLE_GUIDE', 'SNIPPET', 'PROMPT_TEMPLATE'
+  title       String
+  description String?
+  content     String @db.Text
+  tags        String[]
+  language    String?
+  
+  metadata Json @default("{}")
+  
+  usageCount Int @default(0)
+  
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Single column indexes
+  @@index([type])
+  
+  // Composite indexes for common query patterns
+  @@index([userId, type])              // User entries by type
+  @@index([userId, type, language])    // User entries by type and language
+  @@index([userId, updatedAt])         // User's recent entries
+  @@index([type, language, usageCount]) // Popular entries by type/language
+  
+  @@map("knowledge_entries")
+}
+
+// ============================================================================
+// AI Model Settings
+// ============================================================================
+
+model AIModelSetting {
+  id       String @id @default(uuid())
+  name     String @unique
+  provider String // 'ollama' | 'vllm'
+  model    String
+  
+  settings Json @default("{}") // temperature, maxTokens, etc.
+  
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_model_settings")
+}
