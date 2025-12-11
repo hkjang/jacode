@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { KeycloakService } from './services/keycloak.service';
+import { SsoController } from './controllers/sso.controller';
 
 @Module({
   imports: [
@@ -20,8 +22,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy],
-  controllers: [AuthController],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, JwtStrategy, KeycloakService],
+  controllers: [AuthController, SsoController],
+  exports: [AuthService, JwtModule, KeycloakService],
 })
 export class AuthModule {}
