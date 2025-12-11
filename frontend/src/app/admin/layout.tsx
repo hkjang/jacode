@@ -17,20 +17,21 @@ import {
   FileSearch,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LanguageSelector, useI18n } from '@/contexts/I18nContext';
 
 const navItems = [
-  { href: '/admin', label: 'Overview', icon: BarChart3, exact: true },
-  { href: '/admin/users', label: 'Users', icon: Users },
-  { href: '/admin/servers', label: 'Model Servers', icon: Server },
-  { href: '/admin/tasks', label: 'Tasks', icon: Activity },
-  { href: '/admin/models', label: 'AI Models', icon: Bot },
-  { href: '/admin/queue', label: 'Queue', icon: Activity },
-  { href: '/admin/features', label: 'Feature Toggles', icon: Zap },
-  { href: '/admin/prompts', label: 'Prompt Templates', icon: FileText },
-  { href: '/admin/log-viewer', label: 'System Logs', icon: ScrollText },
-  { href: '/admin/audit', label: 'Audit & History', icon: FileSearch },
-  { href: '/admin/backup', label: 'Backup', icon: Shield },
-  { href: '/admin/settings', label: 'Settings', icon: Settings },
+  { href: '/admin', labelKey: 'admin.overview', icon: BarChart3, exact: true },
+  { href: '/admin/users', labelKey: 'admin.users', icon: Users },
+  { href: '/admin/servers', labelKey: 'admin.servers', icon: Server },
+  { href: '/admin/tasks', labelKey: 'admin.tasks', icon: Activity },
+  { href: '/admin/models', labelKey: 'admin.models', icon: Bot },
+  { href: '/admin/queue', labelKey: 'admin.queue', icon: Activity },
+  { href: '/admin/features', labelKey: 'admin.features', icon: Zap },
+  { href: '/admin/prompts', labelKey: 'admin.prompts', icon: FileText },
+  { href: '/admin/log-viewer', labelKey: 'admin.logs', icon: ScrollText },
+  { href: '/admin/audit', labelKey: 'admin.audit', icon: FileSearch },
+  { href: '/admin/backup', labelKey: 'admin.backup', icon: Shield },
+  { href: '/admin/settings', labelKey: 'admin.settings', icon: Settings },
 ];
 
 export default function AdminLayout({
@@ -39,6 +40,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,14 +49,17 @@ export default function AdminLayout({
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
             <Shield className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold">Admin Dashboard</h1>
+            <h1 className="text-xl font-bold">{t('admin.dashboard')}</h1>
           </div>
-          <Link href="/dashboard">
-            <Button variant="outline" size="sm">
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <LanguageSelector />
+            <Link href="/dashboard">
+              <Button variant="outline" size="sm">
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                {t('common.back')}
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -77,7 +82,7 @@ export default function AdminLayout({
                   }`}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}

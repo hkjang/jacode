@@ -36,15 +36,27 @@ export const translations: Record<SupportedLocale, Record<string, string>> = {
 
     // Admin
     'admin.dashboard': '관리자 대시보드',
+    'admin.overview': '개요',
     'admin.users': '사용자 관리',
     'admin.settings': '시스템 설정',
     'admin.servers': '모델 서버',
+    'admin.tasks': '작업',
+    'admin.models': 'AI 모델',
     'admin.prompts': '프롬프트 템플릿',
     'admin.features': '기능 토글',
     'admin.logs': '시스템 로그',
-    'admin.audit': '감사 로그',
+    'admin.audit': '감사 및 이력',
     'admin.backup': '백업/복구',
     'admin.queue': '큐 관리',
+
+    // Dashboard
+    'dashboard.yourProjects': '내 프로젝트',
+    'dashboard.newProject': '새 프로젝트',
+    'dashboard.createProject': '프로젝트 생성',
+    'dashboard.noProjects': '아직 프로젝트가 없습니다',
+    'dashboard.noProjectsDesc': '첫 번째 프로젝트를 생성하여 AI 지원 코딩을 시작하세요',
+    'dashboard.projectName': '프로젝트 이름',
+    'dashboard.projectDescription': '설명 (선택사항)',
 
     // Messages
     'message.saveSuccess': '저장되었습니다.',
@@ -88,15 +100,27 @@ export const translations: Record<SupportedLocale, Record<string, string>> = {
 
     // Admin
     'admin.dashboard': 'Admin Dashboard',
+    'admin.overview': 'Overview',
     'admin.users': 'User Management',
     'admin.settings': 'System Settings',
     'admin.servers': 'Model Servers',
+    'admin.tasks': 'Tasks',
+    'admin.models': 'AI Models',
     'admin.prompts': 'Prompt Templates',
     'admin.features': 'Feature Toggles',
     'admin.logs': 'System Logs',
-    'admin.audit': 'Audit Logs',
+    'admin.audit': 'Audit & History',
     'admin.backup': 'Backup/Restore',
     'admin.queue': 'Queue Management',
+
+    // Dashboard
+    'dashboard.yourProjects': 'Your Projects',
+    'dashboard.newProject': 'New Project',
+    'dashboard.createProject': 'Create Project',
+    'dashboard.noProjects': 'No projects yet',
+    'dashboard.noProjectsDesc': 'Create your first project to get started with AI-powered coding',
+    'dashboard.projectName': 'Project Name',
+    'dashboard.projectDescription': 'Description (optional)',
 
     // Messages
     'message.saveSuccess': 'Saved successfully.',
@@ -140,15 +164,27 @@ export const translations: Record<SupportedLocale, Record<string, string>> = {
 
     // Admin
     'admin.dashboard': '管理ダッシュボード',
+    'admin.overview': '概要',
     'admin.users': 'ユーザー管理',
     'admin.settings': 'システム設定',
     'admin.servers': 'モデルサーバー',
+    'admin.tasks': 'タスク',
+    'admin.models': 'AIモデル',
     'admin.prompts': 'プロンプトテンプレート',
     'admin.features': '機能トグル',
     'admin.logs': 'システムログ',
-    'admin.audit': '監査ログ',
+    'admin.audit': '監査と履歴',
     'admin.backup': 'バックアップ/復元',
     'admin.queue': 'キュー管理',
+
+    // Dashboard
+    'dashboard.yourProjects': 'あなたのプロジェクト',
+    'dashboard.newProject': '新規プロジェクト',
+    'dashboard.createProject': 'プロジェクトを作成',
+    'dashboard.noProjects': 'プロジェクトがまだありません',
+    'dashboard.noProjectsDesc': '最初のプロジェクトを作成して、AI支援コーディングを始めましょう',
+    'dashboard.projectName': 'プロジェクト名',
+    'dashboard.projectDescription': '説明（任意）',
 
     // Messages
     'message.saveSuccess': '保存しました。',

@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { projectApi, authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import { LanguageSelector, useI18n } from '@/contexts/I18nContext';
 
 interface Project {
   id: string;
@@ -29,6 +30,7 @@ interface Project {
 export default function DashboardPage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -97,7 +99,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">{t('common.loading')}</div>
       </div>
     );
   }
@@ -112,16 +114,17 @@ export default function DashboardPage() {
             <span className="text-xl font-bold">JaCode</span>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSelector />
             {user?.role === 'ADMIN' && (
               <Button variant="outline" onClick={() => router.push('/admin')}>
                 <Shield className="h-4 w-4 mr-2" />
-                Admin
+                {t('admin.dashboard')}
               </Button>
             )}
             <span className="text-sm text-muted-foreground">{user?.name || 'User'}</span>
             <Button variant="ghost" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
-              Logout
+              {t('auth.logout')}
             </Button>
           </div>
         </div>
@@ -130,23 +133,23 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold">Your Projects</h1>
+          <h1 className="text-3xl font-bold">{t('dashboard.yourProjects')}</h1>
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            New Project
+            {t('dashboard.newProject')}
           </Button>
         </div>
 
         {projects.length === 0 ? (
           <div className="text-center py-16">
             <FolderOpen className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">No projects yet</h2>
+            <h2 className="text-xl font-semibold mb-2">{t('dashboard.noProjects')}</h2>
             <p className="text-muted-foreground mb-6">
-              Create your first project to get started with AI-powered coding
+              {t('dashboard.noProjectsDesc')}
             </p>
             <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Project
+              {t('dashboard.createProject')}
             </Button>
           </div>
         ) : (

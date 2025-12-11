@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export default function SsoCallbackPage() {
+function SsoCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -77,5 +77,23 @@ export default function SsoCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SsoCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="text-center p-8 rounded-lg border bg-card max-w-md w-full">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary mb-4" />
+            <h2 className="text-lg font-semibold">SSO 인증 처리 중...</h2>
+            <p className="text-muted-foreground mt-2">잠시만 기다려주세요.</p>
+          </div>
+        </div>
+      }
+    >
+      <SsoCallbackContent />
+    </Suspense>
   );
 }
