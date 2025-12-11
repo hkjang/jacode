@@ -84,6 +84,55 @@ export class FileService {
   }
 
   /**
+   * Get file content chunk (specific line range)
+   * For large file chunk rendering support
+   */
+  async getContentChunk(
+    id: string,
+    projectId: string,
+    startLine: number,
+    endLine: number,
+  ) {
+    const file = await this.prisma.file.findFirst({
+      where: { id, projectId },
+      select: {
+        id: true,
+        path: true,
+        name: true,
+        extension: true,
+        content: true,
+        size: true,
+      },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    const lines = (file.content || '').split('\n');
+    const totalLines = lines.length;
+    
+    // Clamp to valid range
+    const start = Math.max(0, startLine - 1); // Convert to 0-indexed
+    const end = Math.min(totalLines, endLine);
+    
+    const chunkContent = lines.slice(start, end).join('\n');
+
+    return {
+      id: file.id,
+      path: file.path,
+      name: file.name,
+      extension: file.extension,
+      size: file.size,
+      totalLines,
+      startLine: start + 1, // Return 1-indexed
+      endLine: end,
+      content: chunkContent,
+      hasMore: end < totalLines,
+    };
+  }
+
+  /**
    * Update file content
    */
   async update(id: string, projectId: string, dto: UpdateFileDto) {

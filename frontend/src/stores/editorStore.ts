@@ -11,7 +11,15 @@ interface EditorFile {
   language?: string;
   isDirty: boolean;
   originalContent: string;
+  // Memory management
+  lastAccessTime: number;
+  isUnloaded: boolean;
+  contentSize: number;
 }
+
+// Memory management constants
+const MAX_CACHED_FILES = 10; // Max files to keep in memory
+const UNLOAD_INACTIVE_AFTER_MS = 5 * 60 * 1000; // 5 minutes
 
 interface EditorState {
   // File management
@@ -24,6 +32,13 @@ interface EditorState {
 
   // Project
   currentProjectId: string | null;
+  
+  // Memory management
+  memoryStats: {
+    totalCachedSize: number;
+    cachedFileCount: number;
+    unloadedFileCount: number;
+  };
 
   // Actions
   setCurrentProject: (projectId: string) => void;
@@ -39,6 +54,11 @@ interface EditorState {
   addFileToTree: (parentPath: string, file: FileTreeNode) => void;
   removeFileFromTree: (path: string) => void;
   renameFileInTree: (path: string, newName: string) => void;
+  
+  // Memory management operations
+  unloadInactiveFiles: () => void;
+  reloadFile: (id: string, content: string) => void;
+  getMemoryStats: () => { totalCachedSize: number; cachedFileCount: number; unloadedFileCount: number };
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -49,6 +69,11 @@ export const useEditorStore = create<EditorState>()(
       openTabs: [],
       activeTabId: null,
       currentProjectId: null,
+      memoryStats: {
+        totalCachedSize: 0,
+        cachedFileCount: 0,
+        unloadedFileCount: 0,
+      },
 
       setCurrentProject: (projectId) => {
         set({
@@ -57,6 +82,11 @@ export const useEditorStore = create<EditorState>()(
           openTabs: [],
           activeTabId: null,
           fileTree: [],
+          memoryStats: {
+            totalCachedSize: 0,
+            cachedFileCount: 0,
+            unloadedFileCount: 0,
+          },
         });
       },
 
@@ -65,21 +95,34 @@ export const useEditorStore = create<EditorState>()(
       },
 
       openFile: (file) => {
-        const { files, openTabs } = get();
+        const { files, openTabs, memoryStats } = get();
 
         // Check if file is already open
         const existingTab = openTabs.find((t) => t.id === file.id);
         if (existingTab) {
-          set({ activeTabId: file.id });
+          // Update last access time
+          const existingFile = files.get(file.id);
+          if (existingFile) {
+            const newFiles = new Map(files);
+            newFiles.set(file.id, { ...existingFile, lastAccessTime: Date.now() });
+            set({ files: newFiles, activeTabId: file.id });
+          } else {
+            set({ activeTabId: file.id });
+          }
           return;
         }
 
-        // Add to files
+        const contentSize = file.content.length;
+        
+        // Add to files with memory tracking
         const newFiles = new Map(files);
         newFiles.set(file.id, {
           ...file,
           isDirty: false,
           originalContent: file.content,
+          lastAccessTime: Date.now(),
+          isUnloaded: false,
+          contentSize,
         });
 
         // Add tab
@@ -95,6 +138,11 @@ export const useEditorStore = create<EditorState>()(
           files: newFiles,
           openTabs: [...openTabs, newTab],
           activeTabId: file.id,
+          memoryStats: {
+            ...memoryStats,
+            totalCachedSize: memoryStats.totalCachedSize + contentSize,
+            cachedFileCount: memoryStats.cachedFileCount + 1,
+          },
         });
       },
 
@@ -224,6 +272,80 @@ export const useEditorStore = create<EditorState>()(
         };
 
         set({ fileTree: renameInNode(fileTree) });
+      },
+
+      // Memory management: Unload inactive files to free memory
+      unloadInactiveFiles: () => {
+        const { files, activeTabId, memoryStats } = get();
+        const now = Date.now();
+        const newFiles = new Map(files);
+        let freedSize = 0;
+        let unloadedCount = 0;
+
+        // Sort files by last access time to determine which to unload
+        const sortedFiles = Array.from(files.entries())
+          .filter(([id, file]) => id !== activeTabId && !file.isDirty && !file.isUnloaded)
+          .sort((a, b) => a[1].lastAccessTime - b[1].lastAccessTime);
+
+        for (const [id, file] of sortedFiles) {
+          // Unload files inactive for more than threshold OR if we have too many cached
+          const isInactive = now - file.lastAccessTime > UNLOAD_INACTIVE_AFTER_MS;
+          const tooManyCached = memoryStats.cachedFileCount - unloadedCount > MAX_CACHED_FILES;
+
+          if (isInactive || tooManyCached) {
+            newFiles.set(id, {
+              ...file,
+              content: '', // Clear content to free memory
+              originalContent: '',
+              isUnloaded: true,
+            });
+            freedSize += file.contentSize;
+            unloadedCount++;
+          }
+        }
+
+        if (unloadedCount > 0) {
+          set({
+            files: newFiles,
+            memoryStats: {
+              totalCachedSize: memoryStats.totalCachedSize - freedSize,
+              cachedFileCount: memoryStats.cachedFileCount - unloadedCount,
+              unloadedFileCount: memoryStats.unloadedFileCount + unloadedCount,
+            },
+          });
+        }
+      },
+
+      // Memory management: Reload unloaded file content
+      reloadFile: (id, content) => {
+        const { files, memoryStats } = get();
+        const file = files.get(id);
+        if (!file || !file.isUnloaded) return;
+
+        const contentSize = content.length;
+        const newFiles = new Map(files);
+        newFiles.set(id, {
+          ...file,
+          content,
+          originalContent: content,
+          isUnloaded: false,
+          lastAccessTime: Date.now(),
+          contentSize,
+        });
+
+        set({
+          files: newFiles,
+          memoryStats: {
+            totalCachedSize: memoryStats.totalCachedSize + contentSize,
+            cachedFileCount: memoryStats.cachedFileCount + 1,
+            unloadedFileCount: memoryStats.unloadedFileCount - 1,
+          },
+        });
+      },
+
+      // Memory management: Get current memory stats
+      getMemoryStats: () => {
+        return get().memoryStats;
       },
     }),
     {

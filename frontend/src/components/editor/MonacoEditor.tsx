@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import Editor, { Monaco, OnMount } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import { useTheme } from 'next-themes';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 
 export interface MonacoEditorProps {
   value?: string;
@@ -12,15 +12,20 @@ export interface MonacoEditorProps {
   path?: string;
   onChange?: (value: string | undefined) => void;
   onSave?: (value: string) => void;
+  onLoadChunk?: (startLine: number, endLine: number) => Promise<string>;
   readOnly?: boolean;
   className?: string;
   options?: monaco.editor.IStandaloneEditorConstructionOptions;
   autoSave?: boolean;
   autoSaveDelay?: number;
+  totalLines?: number;
 }
 
-// Large file threshold (1MB)
-const LARGE_FILE_THRESHOLD = 1024 * 1024;
+// Large file thresholds
+const LARGE_FILE_BYTES_THRESHOLD = 1024 * 1024; // 1MB
+const LARGE_FILE_LINES_THRESHOLD = 5000; // 5000 lines
+const CHUNK_SIZE = 500; // Lines per chunk
+const VISIBLE_CHUNKS_BUFFER = 2; // Extra chunks above/below viewport
 
 export function MonacoEditor({
   value = '',
@@ -28,11 +33,13 @@ export function MonacoEditor({
   path,
   onChange,
   onSave,
+  onLoadChunk,
   readOnly = false,
   className,
   options,
   autoSave = true,
   autoSaveDelay = 2000,
+  totalLines,
 }: MonacoEditorProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -42,6 +49,24 @@ export function MonacoEditor({
   const [isDomReady, setIsDomReady] = useState(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedValueRef = useRef<string>(value);
+  
+  // Large file and chunk state
+  const [isChunkMode, setIsChunkMode] = useState(false);
+  const [showLargeFileWarning, setShowLargeFileWarning] = useState(false);
+
+  // Compute if file is large (either by bytes or line count)
+  const isLargeFile = useMemo(() => {
+    const byteCheck = value.length > LARGE_FILE_BYTES_THRESHOLD;
+    const lineCheck = totalLines ? totalLines > LARGE_FILE_LINES_THRESHOLD : value.split('\n').length > LARGE_FILE_LINES_THRESHOLD;
+    return byteCheck || lineCheck;
+  }, [value, totalLines]);
+
+  // Show warning when opening large files
+  useEffect(() => {
+    if (isLargeFile && !showLargeFileWarning) {
+      setShowLargeFileWarning(true);
+    }
+  }, [isLargeFile, showLargeFileWarning]);
 
   // Check DOM readiness
   useEffect(() => {
@@ -100,9 +125,6 @@ export function MonacoEditor({
       }
     };
   }, []);
-
-  // Check if file is large
-  const isLargeFile = value.length > LARGE_FILE_THRESHOLD;
 
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -265,6 +287,24 @@ export function MonacoEditor({
       ref={containerRef}
       className={`w-full h-full min-h-[200px] ${className || ''}`}
     >
+      {/* Large file warning banner */}
+      {showLargeFileWarning && isLargeFile && (
+        <div className="flex items-center justify-between px-3 py-2 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span>
+              Large file detected ({totalLines ? `${totalLines.toLocaleString()} lines` : `${(value.length / 1024).toFixed(1)} KB`}). 
+              Some features are disabled for better performance.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowLargeFileWarning(false)}
+            className="text-xs px-2 py-1 rounded hover:bg-yellow-500/20"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {!isDomReady ? (
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin mr-2" />

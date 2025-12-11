@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -44,13 +45,23 @@ export class FileController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get file content' })
+  @ApiOperation({ summary: 'Get file content (optionally with line range for large files)' })
   @ApiParam({ name: 'projectId', type: String })
   @ApiParam({ name: 'id', type: String })
   async getContent(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
+    @Query('startLine') startLine?: string,
+    @Query('endLine') endLine?: string,
   ) {
+    if (startLine !== undefined && endLine !== undefined) {
+      return this.fileService.getContentChunk(
+        id,
+        projectId,
+        parseInt(startLine, 10),
+        parseInt(endLine, 10),
+      );
+    }
     return this.fileService.getContent(id, projectId);
   }
 

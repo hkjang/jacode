@@ -633,3 +633,76 @@ model SettingsHistory {
   @@map("settings_history")
 }
 
+// ============================================================================
+// Token Cost Management: Usage Aggregation (집계 배치 시스템)
+// ============================================================================
+
+model UsageAggregation {
+  id          String   @id @default(uuid())
+  
+  userId      String?
+  teamId      String?
+  
+  period      AggregationPeriod
+  periodStart DateTime
+  periodEnd   DateTime
+  
+  totalTokens         Int @default(0)
+  promptTokens        Int @default(0)
+  completionTokens    Int @default(0)
+  requestCount        Int @default(0)
+  estimatedCostUsd    Decimal @default(0) @db.Decimal(10, 6)
+  
+  modelBreakdown      Json @default("{}") // { modelName: { tokens, cost } }
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, period, periodStart])
+  @@unique([teamId, period, periodStart])
+  @@index([userId, periodStart])
+  @@index([teamId, periodStart])
+  @@index([periodStart])
+  @@map("usage_aggregations")
+}
+
+enum AggregationPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ============================================================================
+// Token Cost Management: Cost Alert (비용 알림 설정)
+// ============================================================================
+
+model CostAlert {
+  id          String   @id @default(uuid())
+  
+  userId      String?
+  teamId      String?
+  
+  name        String
+  type        CostAlertType
+  threshold   Decimal @db.Decimal(10, 2) // USD 또는 토큰 수
+  period      AggregationPeriod
+  
+  isEnabled   Boolean @default(true)
+  lastTriggeredAt DateTime?
+  
+  notificationChannels String[] @default(["email", "inapp"])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([teamId])
+  @@index([isEnabled])
+  @@map("cost_alerts")
+}
+
+enum CostAlertType {
+  TOKEN_LIMIT
+  COST_LIMIT
+  RATE_LIMIT // 시간당 요청 수
+}

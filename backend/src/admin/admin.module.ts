@@ -12,6 +12,8 @@ import {
   LogService,
   TeamService,
   SystemSettingsService,
+  UsageAggregationService,
+  CostAlertService,
 } from './services';
 
 import { HealthCheckService } from './services/health-check.service';
@@ -34,6 +36,7 @@ import {
 import { AuditController } from './controllers/audit.controller';
 import { BackupController } from './controllers/backup.controller';
 import { QueueController } from './controllers/queue.controller';
+import { CostAlertController } from './controllers/cost-alert.controller';
 
 @Module({
   imports: [
@@ -52,6 +55,7 @@ import { QueueController } from './controllers/queue.controller';
     AuditController,
     BackupController,
     QueueController,
+    CostAlertController,
   ],
   providers: [
     ModelServerService,
@@ -67,6 +71,8 @@ import { QueueController } from './controllers/queue.controller';
     SettingsHistoryService,
     BackupService,
     QueueManagementService,
+    UsageAggregationService,
+    CostAlertService,
   ],
   exports: [
     ModelServerService,
@@ -82,6 +88,9 @@ import { QueueController } from './controllers/queue.controller';
     SettingsHistoryService,
     BackupService,
     QueueManagementService,
+    UsageAggregationService,
+    CostAlertService,
   ],
 })
 export class AdminModule {}
+
