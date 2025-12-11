@@ -48,6 +48,7 @@ export const translations: Record<SupportedLocale, Record<string, string>> = {
     'admin.audit': '감사 및 이력',
     'admin.backup': '백업/복구',
     'admin.queue': '큐 관리',
+    'admin.costAlerts': '비용 알림',
 
     // Dashboard
     'dashboard.yourProjects': '내 프로젝트',
@@ -112,6 +113,7 @@ export const translations: Record<SupportedLocale, Record<string, string>> = {
     'admin.audit': 'Audit & History',
     'admin.backup': 'Backup/Restore',
     'admin.queue': 'Queue Management',
+    'admin.costAlerts': 'Cost Alerts',
 
     // Dashboard
     'dashboard.yourProjects': 'Your Projects',
@@ -176,6 +178,7 @@ export const translations: Record<SupportedLocale, Record<string, string>> = {
     'admin.audit': '監査と履歴',
     'admin.backup': 'バックアップ/復元',
     'admin.queue': 'キュー管理',
+    'admin.costAlerts': 'コストアラート',
 
     // Dashboard
     'dashboard.yourProjects': 'あなたのプロジェクト',

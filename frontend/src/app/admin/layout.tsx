@@ -15,6 +15,7 @@ import {
   Bot,
   ChevronLeft,
   FileSearch,
+  Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LanguageSelector, useI18n } from '@/contexts/I18nContext';
@@ -31,6 +32,7 @@ const navItems = [
   { href: '/admin/log-viewer', labelKey: 'admin.logs', icon: ScrollText },
   { href: '/admin/audit', labelKey: 'admin.audit', icon: FileSearch },
   { href: '/admin/backup', labelKey: 'admin.backup', icon: Shield },
+  { href: '/admin/cost-alerts', labelKey: 'admin.costAlerts', icon: Bell },
   { href: '/admin/settings', labelKey: 'admin.settings', icon: Settings },
 ];
 
