@@ -86,7 +86,7 @@ export default function AdminLayout({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
+        <div className="flex items-center justify-between max-w-[1800px] mx-auto">
           <div className="flex items-center gap-3">
             <Shield className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold">관리자 대시보드</h1>
@@ -103,7 +103,7 @@ export default function AdminLayout({
         </div>
       </header>
 
-      <div className="flex max-w-7xl mx-auto">
+      <div className="flex max-w-[1800px] mx-auto">
         {/* Sidebar */}
         <aside className="w-60 border-r bg-card min-h-[calc(100vh-65px)] p-4 sticky top-[65px] overflow-y-auto">
           <nav className="space-y-6">
