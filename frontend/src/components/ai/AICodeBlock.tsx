@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Check, Copy, Play, Eye, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MonacoDiffEditor } from '@/components/editor/MonacoDiffEditor';
 
 interface AICodeBlockProps {
   code: string;
@@ -37,57 +38,68 @@ export function AICodeBlock({
     setShowDiff(true);
   };
 
+  const ActionButtons = ({ className, showLabel = false }: { className?: string, showLabel?: boolean }) => (
+    <div className={className}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 px-2 hover:bg-background/80"
+        onClick={handleCopy}
+        title="복사"
+      >
+        {copied ? <Check className="h-3 w-3 text-green-500 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+        {showLabel && (copied ? '복사됨' : '복사')}
+      </Button>
+      
+      {onPreview && currentCode && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 hover:bg-background/80"
+          onClick={handlePreview}
+          title="미리보기"
+        >
+          <Eye className="h-3 w-3 mr-1" />
+          {showLabel && '미리보기'}
+        </Button>
+      )}
+      
+      {onApply && (
+        <Button
+          variant="default"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={handleApply}
+          title="에디터에 적용"
+        >
+          <Play className="h-3 w-3 mr-1" />
+          적용
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <div className="relative group my-2">
       {/* Language Badge */}
       {language && (
-        <div className="absolute top-0 left-0 px-2 py-0.5 text-xs bg-muted rounded-tl rounded-br text-muted-foreground">
+        <div className="absolute top-0 left-0 px-2 py-0.5 text-xs bg-muted rounded-tl rounded-br text-muted-foreground z-10">
           {language}
         </div>
       )}
       
-      {/* Action Buttons */}
-      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 bg-background/80 hover:bg-background"
-          onClick={handleCopy}
-          title="복사"
-        >
-          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-        </Button>
-        
-        {onPreview && currentCode && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 bg-background/80 hover:bg-background"
-            onClick={handlePreview}
-            title="미리보기"
-          >
-            <Eye className="h-3 w-3" />
-          </Button>
-        )}
-        
-        {onApply && (
-          <Button
-            variant="default"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={handleApply}
-            title="에디터에 적용"
-          >
-            <Play className="h-3 w-3 mr-1" />
-            적용
-          </Button>
-        )}
-      </div>
+      {/* Top Action Buttons (Overlay) */}
+      <ActionButtons className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-background/50 backdrop-blur-sm rounded p-0.5" />
 
       {/* Code Block */}
-      <pre className="bg-zinc-900 text-zinc-100 p-3 pt-6 rounded-lg overflow-x-auto text-sm font-mono">
+      <pre className="bg-zinc-900 text-zinc-100 p-3 pt-8 rounded-lg overflow-x-auto text-sm font-mono mb-1">
         <code>{code}</code>
       </pre>
+
+      {/* Bottom Action Buttons (Footer) */}
+      <div className="flex justify-end border-t border-border/50 pt-1">
+        <ActionButtons className="flex gap-2" showLabel={true} />
+      </div>
     </div>
   );
 }
@@ -99,6 +111,7 @@ interface DiffPreviewModalProps {
   originalCode: string;
   newCode: string;
   fileName?: string;
+  language?: string;
   onAccept: () => void;
   onReject: () => void;
 }
@@ -109,6 +122,7 @@ export function DiffPreviewModal({
   originalCode,
   newCode,
   fileName,
+  language,
   onAccept,
   onReject,
 }: DiffPreviewModalProps) {
@@ -120,7 +134,7 @@ export function DiffPreviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card w-[90%] max-w-4xl max-h-[80vh] rounded-lg shadow-xl flex flex-col">
+      <div className="bg-card w-[90%] max-w-7xl h-[85vh] rounded-lg shadow-xl flex flex-col border border-border">
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between">
           <div>
@@ -133,22 +147,18 @@ export function DiffPreviewModal({
         </div>
 
         {/* Diff View */}
-        <div className="flex-1 overflow-auto p-4 grid grid-cols-2 gap-4">
-          {/* Original */}
-          <div>
-            <div className="text-sm font-medium mb-2 text-red-500">- 기존 코드</div>
-            <pre className="bg-red-950/20 border border-red-500/20 p-3 rounded text-sm overflow-x-auto max-h-96">
-              <code>{originalCode}</code>
-            </pre>
-          </div>
-          
-          {/* New */}
-          <div>
-            <div className="text-sm font-medium mb-2 text-green-500">+ 새 코드</div>
-            <pre className="bg-green-950/20 border border-green-500/20 p-3 rounded text-sm overflow-x-auto max-h-96">
-              <code>{newCode}</code>
-            </pre>
-          </div>
+        <div className="flex-1 overflow-hidden p-0">
+          <MonacoDiffEditor
+            original={originalCode}
+            modified={newCode}
+            language={language || 'typescript'}
+            readOnly={true}
+            options={{
+              minimap: { enabled: false },
+              renderSideBySide: true,
+              scrollBeyondLastLine: false,
+            }}
+          />
         </div>
 
         {/* Actions */}

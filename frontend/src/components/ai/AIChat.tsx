@@ -294,6 +294,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
         originalCode={currentFile?.content || ''}
         newCode={pendingCode}
         fileName={currentFile?.path}
+        language={currentFile?.language}
         onAccept={handleAcceptCode}
         onReject={handleRejectCode}
       />
