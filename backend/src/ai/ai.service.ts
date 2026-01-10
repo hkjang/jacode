@@ -7,12 +7,26 @@ import { ChatMessage, ChatOptions, ChatResponse, ChatStreamChunk } from './types
 
 export type AIProviderType = 'ollama' | 'vllm';
 
+interface CachedModelSettings {
+  model: string;
+  provider: AIProviderType;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  contextLength?: number;
+  cachedAt: number;
+}
+
 @Injectable()
 export class AIService {
   private activeProvider: AIProviderType;
   private readonly logger = new Logger(AIService.name);
 
   private modelRouter?: any; // Lazy loaded to avoid circular dependency
+  
+  // Model settings cache (TTL: 60 seconds)
+  private modelSettingsCache: CachedModelSettings | null = null;
+  private readonly CACHE_TTL_MS = 60000;
 
   constructor(
     private readonly configService: ConfigService,
@@ -112,17 +126,33 @@ export class AIService {
   }
 
   /**
-   * Get default model settings from database
+   * Get default model settings from database (with caching)
    */
-  private async getDefaultModelSettings() {
+  private async getDefaultModelSettings(): Promise<CachedModelSettings | null> {
+    // Check cache first
+    const now = Date.now();
+    if (this.modelSettingsCache && (now - this.modelSettingsCache.cachedAt) < this.CACHE_TTL_MS) {
+      return this.modelSettingsCache;
+    }
+
     try {
       const defaultModel = await this.prisma.aIModelSetting.findFirst({
         where: { isDefault: true, isActive: true },
       });
       
       if (defaultModel) {
-        this.logger.log(`Using default model from DB: ${defaultModel.name} (${defaultModel.model})`);
-        return defaultModel;
+        const settings = defaultModel.settings as any;
+        this.modelSettingsCache = {
+          model: defaultModel.model,
+          provider: defaultModel.provider as AIProviderType,
+          temperature: settings?.temperature,
+          maxTokens: settings?.maxTokens,
+          topP: settings?.topP,
+          contextLength: settings?.contextLength,
+          cachedAt: now,
+        };
+        this.logger.log(`Using default model: ${defaultModel.name} (${defaultModel.model})`);
+        return this.modelSettingsCache;
       }
 
       // Fallback: get any active model
@@ -130,11 +160,77 @@ export class AIService {
         where: { isActive: true },
       });
       
-      return anyActiveModel;
+      if (anyActiveModel) {
+        const settings = anyActiveModel.settings as any;
+        this.modelSettingsCache = {
+          model: anyActiveModel.model,
+          provider: anyActiveModel.provider as AIProviderType,
+          temperature: settings?.temperature,
+          maxTokens: settings?.maxTokens,
+          topP: settings?.topP,
+          contextLength: settings?.contextLength,
+          cachedAt: now,
+        };
+        return this.modelSettingsCache;
+      }
+
+      return null;
     } catch (error) {
       this.logger.warn('Failed to get default model settings:', error);
       return null;
     }
+  }
+
+  /**
+   * Clear model settings cache (call after admin updates model)
+   */
+  clearModelSettingsCache() {
+    this.modelSettingsCache = null;
+    this.logger.log('Model settings cache cleared');
+  }
+
+  /**
+   * Log AI usage for analytics
+   */
+  private async logUsage(userId: string, modelName: string, provider: string, feature: string, tokens: number, success: boolean, responseTimeMs: number, errorMessage?: string) {
+    try {
+      await this.prisma.usageLog.create({
+        data: {
+          userId,
+          modelName,
+          provider,
+          feature,
+          totalTokens: tokens,
+          promptTokens: 0,
+          completionTokens: tokens,
+          responseTimeMs,
+          success,
+          errorMessage,
+        },
+      });
+    } catch (error) {
+      this.logger.warn('Failed to log usage:', error);
+    }
+  }
+
+  /**
+   * Get configured model options
+   */
+  async getConfiguredOptions(options?: Partial<ChatOptions>): Promise<Partial<ChatOptions>> {
+    const finalOptions = { ...options };
+    
+    if (!finalOptions?.model) {
+      const defaultSettings = await this.getDefaultModelSettings();
+      if (defaultSettings) {
+        finalOptions.model = defaultSettings.model;
+        this.activeProvider = defaultSettings.provider;
+        if (defaultSettings.temperature) finalOptions.temperature = defaultSettings.temperature;
+        if (defaultSettings.maxTokens) finalOptions.maxTokens = defaultSettings.maxTokens;
+        if (defaultSettings.topP) finalOptions.topP = defaultSettings.topP;
+      }
+    }
+
+    return finalOptions;
   }
 
   /**
@@ -144,7 +240,8 @@ export class AIService {
     messages: ChatMessage[],
     options?: Partial<ChatOptions>,
   ): AsyncGenerator<ChatStreamChunk> {
-    yield* this.getProvider().chatStream(messages, options);
+    const configuredOptions = await this.getConfiguredOptions(options);
+    yield* this.getProvider().chatStream(messages, configuredOptions);
   }
 
   /**
