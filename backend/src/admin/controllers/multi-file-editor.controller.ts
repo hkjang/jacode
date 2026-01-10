@@ -17,7 +17,7 @@ export class EditMultipleFilesDto {
   userRequest: string;
 }
 
-@Controller('admin/multi-file-editor')
+@Controller('api/admin/multi-file-editor')
 @UseGuards(JwtAuthGuard)
 export class MultiFileEditorController {
   constructor(private readonly multiFileEditor: MultiFileEditorService) {}

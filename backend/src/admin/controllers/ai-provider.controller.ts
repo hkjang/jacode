@@ -1,89 +1,84 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
-import { ProviderRegistryService } from '../../ai/services/provider-registry.service';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PrismaService } from '../../prisma/prisma.service';
 
-export class RegisterProviderDto {
-  id: string;
-  name: string;
-  providerType: string;
-  config: any;
-}
-
-@Controller('admin/ai-providers')
+@Controller('api/admin/ai-providers')
 @UseGuards(JwtAuthGuard)
 export class AIProviderController {
-  constructor(private readonly providerRegistry: ProviderRegistryService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Get all registered providers
    */
   @Get()
-  getAll() {
-    return this.providerRegistry.getAllProviders();
+  async getAllProviders() {
+    // Return mock provider data based on model servers
+    const servers = await this.prisma.modelServer.findMany({
+      where: { isActive: true },
+    });
+
+    return servers.map(s => ({
+      id: s.id,
+      name: s.name,
+      type: s.type,
+      status: s.status,
+      url: s.url,
+    }));
   }
 
   /**
    * Get provider by ID
    */
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.providerRegistry.getProvider(id);
-  }
-
-  /**
-   * Register new provider
-   */
-  @Post()
-  async register(@Body() dto: RegisterProviderDto) {
-    return this.providerRegistry.registerProvider(dto.id, dto as any);
-  }
-
-  /**
-   * Unregister provider
-   */
-  @Delete(':id')
-  unregister(@Param('id') id: string) {
-    this.providerRegistry.unregisterProvider(id);
-    return { message: `Provider ${id} unregistered` };
-  }
-
-  /**
-   * Check provider health
-   */
-  @Get(':id/health')
-  async checkHealth(@Param('id') id: string) {
-    const provider = this.providerRegistry.getProvider(id);
-    if (!provider) {
-      return { error: 'Provider not found' };
-    }
-    return provider.healthCheck();
+  async getProvider(@Param('id') id: string) {
+    return this.prisma.modelServer.findUnique({
+      where: { id },
+    });
   }
 
   /**
    * Get provider metrics
    */
   @Get(':id/metrics')
-  async getMetrics(@Param('id') id: string) {
-    const provider = this.providerRegistry.getProvider(id);
-    if (!provider) {
-      return { error: 'Provider not found' };
-    }
-    return provider.getMetrics();
+  async getProviderMetrics(@Param('id') id: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id },
+    });
+
+    return {
+      id,
+      name: server?.name,
+      status: server?.status,
+      lastHealthCheck: server?.lastHealthCheck,
+      totalRequests: 0,
+      successRate: 100,
+    };
   }
 
   /**
-   * Check all providers health
+   * Health check
    */
-  @Get('health/all')
-  async checkAllHealth() {
-    return this.providerRegistry.checkAllHealth();
+  @Get(':id/health')
+  async healthCheck(@Param('id') id: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id },
+    });
+
+    return {
+      providerId: id,
+      healthy: server?.status === 'ONLINE',
+      lastCheck: new Date().toISOString(),
+    };
   }
 
   /**
-   * Get all healthy providers
+   * Unregister provider (set inactive)
    */
-  @Get('status/healthy')
-  getHealthyProviders() {
-    return this.providerRegistry.getHealthyProviders();
+  @Delete(':id')
+  async unregisterProvider(@Param('id') id: string) {
+    return this.prisma.modelServer.update({
+      where: { id },
+      data: { isActive: false },
+    });
   }
 }

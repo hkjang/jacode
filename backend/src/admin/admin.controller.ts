@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Delete,
   Param,
@@ -199,15 +200,52 @@ export class AdminController {
     });
   }
 
+  @Post('ai-models')
+  @ApiOperation({ summary: 'Create AI model' })
+  async createAIModel(
+    @Body() body: {
+      name: string;
+      provider: string;
+      model: string;
+      isActive?: boolean;
+      settings?: object;
+    },
+  ) {
+    return this.prisma.aIModelSetting.create({
+      data: {
+        name: body.name,
+        provider: body.provider,
+        model: body.model,
+        isActive: body.isActive ?? true,
+        isDefault: false,
+        settings: body.settings || {},
+      },
+    });
+  }
+
   @Patch('ai-models/:id')
   @ApiOperation({ summary: 'Update AI model' })
   async updateAIModel(
     @Param('id') id: string,
-    @Body() body: { isActive?: boolean; settings?: object },
+    @Body() body: { 
+      name?: string;
+      provider?: string;
+      model?: string;
+      isActive?: boolean; 
+      settings?: object;
+    },
   ) {
     return this.prisma.aIModelSetting.update({
       where: { id },
       data: body,
+    });
+  }
+
+  @Delete('ai-models/:id')
+  @ApiOperation({ summary: 'Delete AI model' })
+  async deleteAIModel(@Param('id') id: string) {
+    return this.prisma.aIModelSetting.delete({
+      where: { id },
     });
   }
 
@@ -224,6 +262,7 @@ export class AdminController {
       data: { isDefault: true },
     });
   }
+
 
   @Get('export')
   @ApiOperation({ summary: 'Export all data' })

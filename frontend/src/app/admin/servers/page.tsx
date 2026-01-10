@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Server,
   Plus,
@@ -10,9 +9,14 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Settings,
   Trash2,
   Activity,
+  Download,
+  BarChart,
+  Copy,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -31,15 +35,27 @@ interface ModelServer {
   isActive: boolean;
 }
 
+interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
+}
+
 export default function ServersPage() {
-  const router = useRouter();
   const [servers, setServers] = useState<ModelServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [healthChecking, setHealthChecking] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<ModelServer | null>(null);
+  const [models, setModels] = useState<OllamaModel[]>([]);
+  const [showModelsModal, setShowModelsModal] = useState(false);
+  const [stats, setStats] = useState<any>(null);
+  const [pullModel, setPullModel] = useState('');
+  const [pulling, setPulling] = useState(false);
 
   useEffect(() => {
     loadServers();
+    loadStats();
   }, []);
 
   const loadServers = async () => {
@@ -50,6 +66,15 @@ export default function ServersPage() {
       console.error('Failed to load servers:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const res = await api.get('/api/admin/servers/statistics');
+      setStats(res.data);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
     }
   };
 
@@ -86,13 +111,65 @@ export default function ServersPage() {
     }
   };
 
+  const duplicateServer = async (id: string) => {
+    try {
+      await api.post(`/api/admin/servers/${id}/duplicate`);
+      await loadServers();
+    } catch (error) {
+      console.error('Failed to duplicate server:', error);
+    }
+  };
+
   const deleteServer = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this server?')) return;
+    if (!confirm('정말 서버를 삭제하시겠습니까?')) return;
     try {
       await api.delete(`/api/admin/servers/${id}`);
       await loadServers();
     } catch (error) {
       console.error('Failed to delete server:', error);
+    }
+  };
+
+  const loadModels = async (server: ModelServer) => {
+    setSelectedServer(server);
+    setShowModelsModal(true);
+    try {
+      const res = await api.get(`/api/admin/servers/${server.id}/models`);
+      setModels(res.data || []);
+    } catch (error) {
+      console.error('Failed to load models:', error);
+      setModels([]);
+    }
+  };
+
+  const handlePullModel = async () => {
+    if (!selectedServer || !pullModel) return;
+    setPulling(true);
+    try {
+      await api.post(`/api/admin/servers/${selectedServer.id}/models/pull`, {
+        modelName: pullModel
+      });
+      alert(`${pullModel} 다운로드가 시작되었습니다.`);
+      setPullModel('');
+      // Reload models after a delay
+      setTimeout(() => loadModels(selectedServer), 3000);
+    } catch (error) {
+      console.error('Failed to pull model:', error);
+      alert('모델 다운로드에 실패했습니다.');
+    } finally {
+      setPulling(false);
+    }
+  };
+
+  const handleDeleteModel = async (modelName: string) => {
+    if (!selectedServer) return;
+    if (!confirm(`${modelName} 모델을 삭제하시겠습니까?`)) return;
+    try {
+      await api.delete(`/api/admin/servers/${selectedServer.id}/models/${encodeURIComponent(modelName)}`);
+      await loadModels(selectedServer);
+    } catch (error) {
+      console.error('Failed to delete model:', error);
+      alert('모델 삭제에 실패했습니다.');
     }
   };
 
@@ -109,6 +186,14 @@ export default function ServersPage() {
     }
   };
 
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -117,12 +202,16 @@ export default function ServersPage() {
     );
   }
 
+  const onlineCount = servers.filter(s => s.status === 'ONLINE').length;
+  const offlineCount = servers.filter(s => s.status === 'OFFLINE').length;
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Server className="h-5 w-5" />
-          Model Servers
+          모델 서버 관리
         </h2>
         <div className="flex gap-2">
           <Button
@@ -136,19 +225,40 @@ export default function ServersPage() {
             ) : (
               <Activity className="h-4 w-4 mr-2" />
             )}
-            Check All
+            전체 체크
           </Button>
           <Button size="sm" onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Server
+            서버 추가
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4">
+      {/* Stats Summary */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="p-4 rounded-lg border bg-card text-center">
+          <p className="text-2xl font-bold">{servers.length}</p>
+          <p className="text-sm text-muted-foreground">전체 서버</p>
+        </div>
+        <div className="p-4 rounded-lg border bg-card text-center">
+          <p className="text-2xl font-bold text-green-500">{onlineCount}</p>
+          <p className="text-sm text-muted-foreground">온라인</p>
+        </div>
+        <div className="p-4 rounded-lg border bg-card text-center">
+          <p className="text-2xl font-bold text-red-500">{offlineCount}</p>
+          <p className="text-sm text-muted-foreground">오프라인</p>
+        </div>
+        <div className="p-4 rounded-lg border bg-card text-center">
+          <p className="text-2xl font-bold">{stats?.executionsLast24h || 0}</p>
+          <p className="text-sm text-muted-foreground">24시간 실행</p>
+        </div>
+      </div>
+
+      {/* Servers List */}
+      <div className="space-y-4">
         {servers.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            No model servers configured. Add one to get started.
+            등록된 모델 서버가 없습니다. 서버를 추가해주세요.
           </div>
         ) : (
           servers.map((server) => (
@@ -162,19 +272,37 @@ export default function ServersPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{server.name}</h3>
-                      <span className="text-xs px-2 py-0.5 bg-muted rounded">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        server.type === 'OLLAMA' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                      }`}>
                         {server.type}
                       </span>
+                      {!server.isActive && (
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                          비활성
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">{server.url}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {server.type === 'OLLAMA' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => loadModels(server)}
+                      title="모델 관리"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => checkHealth(server.id)}
                     disabled={healthChecking === server.id}
+                    title="헬스체크"
                   >
                     {healthChecking === server.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -184,34 +312,65 @@ export default function ServersPage() {
                   </Button>
                   <Button
                     size="sm"
-                    variant={server.isActive ? 'destructive' : 'default'}
+                    variant="ghost"
                     onClick={() => toggleServer(server.id, server.isActive)}
+                    title={server.isActive ? '비활성화' : '활성화'}
                   >
-                    {server.isActive ? 'Disable' : 'Enable'}
+                    {server.isActive ? (
+                      <ToggleRight className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <ToggleLeft className="h-4 w-4" />
+                    )}
                   </Button>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    onClick={() => duplicateServer(server.id)}
+                    title="복제"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => deleteServer(server.id)}
+                    className="text-red-500"
+                    title="삭제"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t flex gap-6 text-sm text-muted-foreground">
-                <span>Max Tokens: {server.maxTokens}</span>
-                <span>Device: {server.device}</span>
-                <span>Weight: {server.routingWeight}</span>
-                <span>Rate Limit: {server.rateLimit}/min</span>
-                {server.lastHealthCheck && (
-                  <span>Last Check: {new Date(server.lastHealthCheck).toLocaleString()}</span>
-                )}
+              <div className="mt-3 pt-3 border-t grid grid-cols-5 gap-4 text-sm text-muted-foreground">
+                <div>
+                  <span className="block font-medium text-foreground">{server.maxTokens}</span>
+                  <span>Max Tokens</span>
+                </div>
+                <div>
+                  <span className="block font-medium text-foreground">{server.device}</span>
+                  <span>Device</span>
+                </div>
+                <div>
+                  <span className="block font-medium text-foreground">{server.routingWeight}</span>
+                  <span>가중치</span>
+                </div>
+                <div>
+                  <span className="block font-medium text-foreground">{server.rateLimit}/분</span>
+                  <span>Rate Limit</span>
+                </div>
+                <div>
+                  <span className="block font-medium text-foreground">
+                    {server.lastHealthCheck ? new Date(server.lastHealthCheck).toLocaleTimeString() : '-'}
+                  </span>
+                  <span>마지막 체크</span>
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
 
+      {/* Add Server Modal */}
       {showAddModal && (
         <AddServerModal
           onClose={() => setShowAddModal(false)}
@@ -220,6 +379,78 @@ export default function ServersPage() {
             loadServers();
           }}
         />
+      )}
+
+      {/* Models Modal */}
+      {showModelsModal && selectedServer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg p-6 w-full max-w-2xl border max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                {selectedServer.name} - 모델 관리
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowModelsModal(false)}>
+                ✕
+              </Button>
+            </div>
+
+            {/* Pull Model */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={pullModel}
+                onChange={(e) => setPullModel(e.target.value)}
+                placeholder="모델 이름 (예: codellama:7b)"
+                className="flex-1 px-3 py-2 border rounded-md"
+              />
+              <Button onClick={handlePullModel} disabled={pulling || !pullModel}>
+                {pulling ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Pull
+              </Button>
+            </div>
+
+            {/* Models List */}
+            <div className="space-y-2">
+              {models.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">
+                  설치된 모델이 없습니다.
+                </p>
+              ) : (
+                models.map((model) => (
+                  <div
+                    key={model.name}
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                  >
+                    <div>
+                      <p className="font-medium">{model.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatBytes(model.size)} • {new Date(model.modified_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-500"
+                      onClick={() => handleDeleteModel(model.name)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" onClick={() => setShowModelsModal(false)}>
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -232,8 +463,26 @@ function AddServerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
     url: 'http://localhost:11434',
     maxTokens: 4096,
     device: 'auto',
+    routingWeight: 100,
+    rateLimit: 60,
   });
   const [loading, setLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTest = async () => {
+    setLoading(true);
+    try {
+      const res = await api.post('/api/admin/servers/test-connection', {
+        url: form.url,
+        type: form.type,
+      });
+      setTestResult(res.data);
+    } catch (error: any) {
+      setTestResult({ success: false, message: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,20 +500,21 @@ function AddServerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-card rounded-lg p-6 w-full max-w-md border">
-        <h3 className="text-lg font-semibold mb-4">Add Model Server</h3>
+        <h3 className="text-lg font-semibold mb-4">모델 서버 추가</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Name</label>
+            <label className="block text-sm font-medium mb-1">서버 이름</label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="w-full px-3 py-2 rounded border bg-background"
+              placeholder="Primary Ollama Server"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Type</label>
+            <label className="block text-sm font-medium mb-1">서버 타입</label>
             <select
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value as any })}
@@ -276,13 +526,23 @@ function AddServerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">URL</label>
-            <input
-              type="url"
-              value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              className="w-full px-3 py-2 rounded border bg-background"
-              required
-            />
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+                className="flex-1 px-3 py-2 rounded border bg-background"
+                required
+              />
+              <Button type="button" variant="outline" onClick={handleTest} disabled={loading}>
+                테스트
+              </Button>
+            </div>
+            {testResult && (
+              <p className={`text-sm mt-1 ${testResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                {testResult.message}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -307,13 +567,35 @@ function AddServerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               </select>
             </div>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">라우팅 가중치</label>
+              <input
+                type="number"
+                value={form.routingWeight}
+                onChange={(e) => setForm({ ...form, routingWeight: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background"
+                min={0}
+                max={1000}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Rate Limit (/분)</label>
+              <input
+                type="number"
+                value={form.rateLimit}
+                onChange={(e) => setForm({ ...form, rateLimit: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              취소
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Add Server
+              서버 추가
             </Button>
           </div>
         </form>
@@ -321,3 +603,4 @@ function AddServerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
     </div>
   );
 }
+

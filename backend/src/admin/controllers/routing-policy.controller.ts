@@ -25,7 +25,7 @@ export class UpdateRoutingPolicyDto {
   isActive?: boolean;
 }
 
-@Controller('admin/routing-policies')
+@Controller('api/admin/routing-policies')
 @UseGuards(JwtAuthGuard)
 export class RoutingPolicyController {
   constructor(private readonly prisma: PrismaService) {}
@@ -106,6 +106,10 @@ export class RoutingPolicyController {
     const policy = await this.prisma.modelRoutingPolicy.findUnique({
       where: { id },
     });
+
+    if (!policy) {
+      throw new Error('Policy not found');
+    }
 
     return this.prisma.modelRoutingPolicy.update({
       where: { id },

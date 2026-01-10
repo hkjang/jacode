@@ -1,53 +1,98 @@
-import { Controller, Get, Delete, Post, Body, Param, UseGuards } from '@nestjs/common';
-import { CachingService } from '../../common/services/caching.service';
+import { Controller, Get, Post, Delete, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
-@Controller('admin/cache')
+// In-memory cache for demo
+const memoryCache = new Map<string, { value: any; expiresAt: number }>();
+
+@Controller('api/admin/cache')
 @UseGuards(JwtAuthGuard)
 export class CacheController {
-  constructor(private readonly cachingService: CachingService) {}
-
   /**
    * Get cache statistics
    */
   @Get('stats')
-  getStats() {
-    return this.cachingService.getStats();
+  async getStats() {
+    const now = Date.now();
+    let activeCount = 0;
+    let expiredCount = 0;
+    
+    memoryCache.forEach((item) => {
+      if (item.expiresAt > now) {
+        activeCount++;
+      } else {
+        expiredCount++;
+      }
+    });
+
+    return {
+      totalEntries: memoryCache.size,
+      activeEntries: activeCount,
+      expiredEntries: expiredCount,
+      memoryUsage: process.memoryUsage().heapUsed,
+    };
+  }
+
+  /**
+   * Get all cache keys
+   */
+  @Get('keys')
+  async getKeys() {
+    return Array.from(memoryCache.keys());
   }
 
   /**
    * Clear all cache
    */
-  @Delete('all')
-  clearAll() {
-    this.cachingService.clearAll();
-    return { message: 'All cache cleared' };
+  @Post('clear')
+  async clearAll() {
+    const count = memoryCache.size;
+    memoryCache.clear();
+    return { cleared: count, success: true };
   }
 
   /**
    * Clear cache by pattern
    */
-  @Delete('pattern')
-  clearPattern(@Body() body: { pattern: string }) {
-    const count = this.cachingService.clearPattern(body.pattern);
-    return { message: `Cleared ${count} entries`, count };
+  @Post('clear/:pattern')
+  async clearByPattern(@Param('pattern') pattern: string) {
+    let count = 0;
+    const regex = new RegExp(pattern.replace('*', '.*'));
+    
+    memoryCache.forEach((_, key) => {
+      if (regex.test(key)) {
+        memoryCache.delete(key);
+        count++;
+      }
+    });
+
+    return { pattern, cleared: count, success: true };
   }
 
   /**
-   * Delete specific cache key
+   * Get cache entry
    */
-  @Delete('key/:key')
-  deleteKey(@Param('key') key: string) {
-    const deleted = this.cachingService.delete(key);
-    return { deleted };
+  @Get('entry/:key')
+  async getEntry(@Param('key') key: string) {
+    const entry = memoryCache.get(key);
+    if (!entry) {
+      return { found: false };
+    }
+    return {
+      found: true,
+      key,
+      value: entry.value,
+      expiresAt: new Date(entry.expiresAt).toISOString(),
+      expired: entry.expiresAt < Date.now(),
+    };
   }
 
   /**
-   * Warm up cache (preload common queries)
+   * Delete cache entry
    */
-  @Post('warmup')
-  async warmup() {
-    // Implementation would preload common data
-    return { message: 'Cache warmup initiated' };
+  @Delete('entry/:key')
+  async deleteEntry(@Param('key') key: string) {
+    const existed = memoryCache.has(key);
+    memoryCache.delete(key);
+    return { key, deleted: existed };
   }
 }

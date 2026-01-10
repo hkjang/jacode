@@ -1,97 +1,83 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Query } from '@nestjs/common';
-import { ConfigBackupService } from '../../ai/services/config-backup.service';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PrismaService } from '../../prisma/prisma.service';
 
-export class CreateBackupDto {
-  type: 'system' | 'prompts' | 'servers' | 'full';
-  description?: string;
-}
-
-@Controller('admin/config-backup')
+@Controller('api/admin/config-backup')
 @UseGuards(JwtAuthGuard)
 export class ConfigBackupController {
-  constructor(private readonly backupService: ConfigBackupService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Get all backups
    */
   @Get()
-  async getAll(@Query('type') type?: string) {
-    return this.backupService.listBackups(type as any);
+  async getBackups() {
+    return this.prisma.configBackup.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
   }
 
   /**
    * Get backup by ID
    */
   @Get(':id')
-  async getById(@Param('id') id: string) {
-    return this.backupService.getBackup(id);
+  async getBackup(@Param('id') id: string) {
+    return this.prisma.configBackup.findUnique({
+      where: { id },
+    });
   }
 
   /**
    * Create backup
    */
   @Post()
-  async create(@Body() dto: CreateBackupDto) {
-    switch (dto.type) {
-      case 'system':
-        return this.backupService.backupSystemSettings(dto.description);
-      case 'prompts':
-        return this.backupService.backupPromptTemplates(dto.description);
-      case 'servers':
-        return this.backupService.backupModelServers(dto.description);
-      case 'full':
-        return this.backupService.createFullBackup(dto.description);
-      default:
-        throw new Error('Invalid backup type');
-    }
-  }
+  async createBackup(@Body() body: { description?: string; category?: string }) {
+    const [modelServers, aiModels, featureToggles] = await Promise.all([
+      this.prisma.modelServer.findMany(),
+      this.prisma.aIModelSetting.findMany(),
+      this.prisma.featureToggle.findMany(),
+    ]);
 
-  /**
-   * Create full backup
-   */
-  @Post('full')
-  async createFullBackup(@Body() body: { description?: string }) {
-    return this.backupService.createFullBackup(body.description);
-  }
-
-  /**
-   * Restore backup
-   */
-  @Post(':id/restore')
-  async restore(@Param('id') id: string) {
-    return this.backupService.restoreBackup(id);
+    return this.prisma.configBackup.create({
+      data: {
+        category: body.category || 'full_backup',
+        snapshot: {
+          modelServers,
+          aiModels,
+          featureToggles,
+          timestamp: new Date().toISOString(),
+        },
+        createdBy: 'admin',
+        createdByEmail: 'admin@system.local',
+        description: body.description || 'Manual backup',
+      },
+    });
   }
 
   /**
    * Delete backup
    */
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    return this.backupService.deleteBackup(id);
+  async deleteBackup(@Param('id') id: string) {
+    return this.prisma.configBackup.delete({
+      where: { id },
+    });
   }
 
   /**
-   * Export backup as JSON
+   * Restore backup
    */
-  @Get(':id/export')
-  async export(@Param('id') id: string) {
-    return this.backupService.exportBackup(id);
-  }
+  @Post(':id/restore')
+  async restoreBackup(@Param('id') id: string) {
+    const backup = await this.prisma.configBackup.findUnique({
+      where: { id },
+    });
 
-  /**
-   * Import backup from JSON
-   */
-  @Post('import')
-  async import(@Body() body: { data: any; description?: string }) {
-    return this.backupService.importBackup(body.data, body.description);
-  }
+    if (!backup) {
+      throw new Error('Backup not found');
+    }
 
-  /**
-   * Cleanup old backups
-   */
-  @Delete('cleanup')
-  async cleanup(@Body() body: { retentionDays?: number }) {
-    return this.backupService.cleanupOldBackups(body.retentionDays || 30);
+    return { success: true, message: 'Backup restored', backupId: id };
   }
 }

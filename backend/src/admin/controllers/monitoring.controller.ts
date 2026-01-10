@@ -2,7 +2,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { MonitoringService } from '../services/monitoring.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
-@Controller('admin/monitoring')
+@Controller('api/admin/monitoring')
 @UseGuards(JwtAuthGuard)
 export class MonitoringController {
   constructor(private readonly monitoringService: MonitoringService) {}

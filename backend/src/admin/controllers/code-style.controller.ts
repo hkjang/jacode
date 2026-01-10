@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
-import { CodeStyleService } from '../../ai/services/code-style.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export class CreateStylePresetDto {
   name: string;
@@ -18,17 +18,19 @@ export class UpdateStylePresetDto {
   isActive?: boolean;
 }
 
-@Controller('admin/code-styles')
+@Controller('api/admin/code-styles')
 @UseGuards(JwtAuthGuard)
 export class CodeStyleController {
-  constructor(private readonly codeStyleService: CodeStyleService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Get all code style presets
    */
   @Get()
   async getAll() {
-    return this.codeStyleService.getAllPresets();
+    return this.prisma.codeStylePreset.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
@@ -36,7 +38,9 @@ export class CodeStyleController {
    */
   @Get(':id')
   async getById(@Param('id') id: string) {
-    return this.codeStyleService.getPresetById(id);
+    return this.prisma.codeStylePreset.findUnique({
+      where: { id },
+    });
   }
 
   /**
@@ -44,13 +48,15 @@ export class CodeStyleController {
    */
   @Post()
   async create(@Body() dto: CreateStylePresetDto) {
-    return this.codeStyleService.createCustomPreset(
-      dto.name,
-      dto.language,
-      dto.rules,
-      dto.conventions,
-      dto.teamId
-    );
+    return this.prisma.codeStylePreset.create({
+      data: {
+        name: dto.name,
+        language: dto.language,
+        rules: dto.rules || {},
+        conventions: dto.conventions,
+        isGlobal: dto.isGlobal || false,
+      },
+    });
   }
 
   /**
@@ -58,7 +64,10 @@ export class CodeStyleController {
    */
   @Put(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateStylePresetDto) {
-    return this.codeStyleService.updatePreset(id, dto);
+    return this.prisma.codeStylePreset.update({
+      where: { id },
+      data: dto as any,
+    });
   }
 
   /**
@@ -66,7 +75,9 @@ export class CodeStyleController {
    */
   @Delete(':id')
   async delete(@Param('id') id: string) {
-    return this.codeStyleService.deletePreset(id);
+    return this.prisma.codeStylePreset.delete({
+      where: { id },
+    });
   }
 
   /**
@@ -74,15 +85,8 @@ export class CodeStyleController {
    */
   @Get('language/:language')
   async getByLanguage(@Param('language') language: string) {
-    return this.codeStyleService.getPresetsByLanguage(language);
-  }
-
-  /**
-   * Apply style to code (test)
-   */
-  @Post('apply')
-  async applyStyle(@Body() body: { code: string; presetId: string }) {
-    const preset = await this.codeStyleService.getPresetById(body.presetId);
-    return this.codeStyleService.applyStyle(body.code, preset);
+    return this.prisma.codeStylePreset.findMany({
+      where: { language },
+    });
   }
 }

@@ -16,7 +16,7 @@ export class RefactorFileDto {
   filePath: string;
 }
 
-@Controller('admin/auto-refactoring')
+@Controller('api/admin/auto-refactoring')
 @UseGuards(JwtAuthGuard)
 export class AutoRefactoringController {
   constructor(private readonly refactoringAgent: AutoRefactoringAgent) {}

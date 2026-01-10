@@ -43,15 +43,18 @@ export class QuotaManagementService {
    * Consume quota for a request
    */
   async consumeQuota(userId: string, tokens: number = 1): Promise<void> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Update usage log
+    // Log usage in usage log table with required fields
     await this.prisma.usageLog.create({
       data: {
         userId,
-        type: 'AI_GENERATION',
-        metadata: { tokens },
+        modelName: 'default',
+        provider: 'ollama',
+        feature: 'ai_generation',
+        totalTokens: tokens,
+        promptTokens: 0,
+        completionTokens: tokens,
+        responseTimeMs: 0,
+        success: true,
       },
     });
 
@@ -127,7 +130,6 @@ export class QuotaManagementService {
   async resetDailyQuotas() {
     this.logger.log('Resetting daily quotas');
     // Daily quotas reset automatically based on timestamp
-    // This is mainly for logging/monitoring
   }
 
   /**

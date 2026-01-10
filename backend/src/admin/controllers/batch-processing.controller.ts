@@ -17,7 +17,7 @@ export class CreateBatchJobDto {
   requests: any[];
 }
 
-@Controller('admin/batch-processing')
+@Controller('api/admin/batch-processing')
 @UseGuards(JwtAuthGuard)
 export class BatchProcessingController {
   constructor(private readonly batchService: BatchProcessingService) {}
