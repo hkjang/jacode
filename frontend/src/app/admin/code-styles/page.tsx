@@ -8,11 +8,10 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
-  Save,
-  Languages,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { PresetForm } from './components/PresetForm';
 
 interface CodeStylePreset {
   id: string;
@@ -34,7 +33,7 @@ const LANGUAGES = ['typescript', 'javascript', 'python', 'java', 'go', 'rust', '
 export default function CodeStylesPage() {
   const [presets, setPresets] = useState<CodeStylePreset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingPreset, setEditingPreset] = useState<CodeStylePreset | null>(null);
+  const [editingPreset, setEditingPreset] = useState<Partial<CodeStylePreset> | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [filterLang, setFilterLang] = useState<string>('');
 
@@ -66,8 +65,8 @@ export default function CodeStylesPage() {
 
   const savePreset = async (preset: Partial<CodeStylePreset>) => {
     try {
-      if (editingPreset?.id) {
-        await api.put(`/api/admin/code-styles/${editingPreset.id}`, preset);
+      if (preset.id) {
+        await api.put(`/api/admin/code-styles/${preset.id}`, preset);
       } else {
         await api.post('/api/admin/code-styles', preset);
       }
@@ -76,12 +75,42 @@ export default function CodeStylesPage() {
       loadPresets();
     } catch (error) {
       console.error('Failed to save preset:', error);
+      alert('저장 중 오류가 발생했습니다.');
     }
+  };
+
+  const handleEdit = (preset: CodeStylePreset) => {
+    setEditingPreset(preset);
+  };
+
+  const handleCreate = () => {
+    setEditingPreset({
+      name: '',
+      language: 'typescript',
+      rules: { indentStyle: 'spaces', indentSize: 2, quotes: 'single', semicolons: true },
+      conventions: '',
+      isGlobal: false,
+    });
+    setIsCreating(true);
   };
 
   const filteredPresets = filterLang
     ? presets.filter((p) => p.language === filterLang)
     : presets;
+
+  // Show Form view if creating or editing
+  if (isCreating || editingPreset) {
+    return (
+      <PresetForm
+        preset={editingPreset}
+        onSave={savePreset}
+        onCancel={() => {
+          setEditingPreset(null);
+          setIsCreating(false);
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -96,16 +125,16 @@ export default function CodeStylesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Code className="h-5 w-5" />
+          <Code className="h-5 w-5 text-primary" />
           코드 스타일 프리셋
         </h2>
         <div className="flex gap-2">
           <select
             value={filterLang}
             onChange={(e) => setFilterLang(e.target.value)}
-            className="px-3 py-1 border rounded-md text-sm"
+            className="px-3 py-1 border rounded-md text-sm bg-background"
           >
-            <option value="">전체 언어</option>
+            <option value="">전체 언어 ({presets.length})</option>
             {LANGUAGES.map((lang) => (
               <option key={lang} value={lang}>{lang}</option>
             ))}
@@ -114,227 +143,91 @@ export default function CodeStylesPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             새로고침
           </Button>
-          <Button size="sm" onClick={() => { 
-            setIsCreating(true); 
-            setEditingPreset({
-              rules: { indentStyle: 'spaces', indentSize: 2, quotes: 'single', semicolons: true }
-            } as any); 
-          }}>
+          <Button size="sm" onClick={handleCreate}>
             <Plus className="h-4 w-4 mr-2" />
             프리셋 추가
           </Button>
         </div>
       </div>
 
-      {/* Create/Edit Form */}
-      {(editingPreset || isCreating) && (
-        <PresetForm
-          preset={editingPreset}
-          onSave={savePreset}
-          onCancel={() => { setEditingPreset(null); setIsCreating(false); }}
-        />
-      )}
-
       {/* Presets Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredPresets.map((preset) => (
-          <div key={preset.id} className="p-4 rounded-lg border bg-card">
-            <div className="flex items-start justify-between mb-2">
+          <div key={preset.id} className="p-5 rounded-lg border bg-card hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="font-medium">{preset.name}</h3>
-                <span className="text-xs px-2 py-0.5 bg-primary/10 rounded">
-                  {preset.language}
-                </span>
-                {preset.isGlobal && (
-                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded ml-1">
-                    전역
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium text-lg">{preset.name}</h3>
+                  {preset.isGlobal && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
+                      GLOBAL
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1">
+                   <span className="text-xs px-2 py-0.5 bg-secondary text-secondary-foreground rounded capitalize">
+                    {preset.language}
                   </span>
-                )}
+                </div>
               </div>
               <div className="flex gap-1">
                 <Button
                   variant="ghost"
-                  size="sm"
-                  onClick={() => setEditingPreset(preset)}
+                  size="icon"
+                  onClick={() => handleEdit(preset)}
+                  className="h-8 w-8"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
                   onClick={() => deletePreset(preset.id)}
-                  className="text-red-500 hover:text-red-600"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>
             
-            <div className="text-sm space-y-1 text-muted-foreground">
-              <p>들여쓰기: {preset.rules.indentSize} {preset.rules.indentStyle}</p>
-              <p>따옴표: {preset.rules.quotes}</p>
-              <p>세미콜론: {preset.rules.semicolons ? '사용' : '미사용'}</p>
+            <div className="space-y-2 py-2 border-t border-b text-sm text-muted-foreground bg-muted/20 -mx-5 px-5 my-3">
+              <div className="flex justify-between">
+                <span>Indent</span>
+                <span className="font-mono text-foreground">{preset.rules.indentSize} {preset.rules.indentStyle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Quotes</span>
+                <span className="font-mono text-foreground capitalize">{preset.rules.quotes}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Semicolons</span>
+                <span className="font-mono text-foreground capitalize">{String(preset.rules.semicolons)}</span>
+              </div>
             </div>
 
             {preset.conventions && (
-              <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
-                {preset.conventions}
-              </p>
+              <div className="mt-3">
+                <p className="text-xs text-muted-foreground font-medium mb-1">Convention Preview:</p>
+                <div className="text-xs text-muted-foreground line-clamp-2 bg-muted p-2 rounded">
+                  {preset.conventions}
+                </div>
+              </div>
             )}
           </div>
         ))}
 
         {filteredPresets.length === 0 && (
-          <div className="col-span-full text-center py-12 text-muted-foreground">
-            등록된 코드 스타일 프리셋이 없습니다.
+           <div className="col-span-full flex flex-col items-center justify-center py-16 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/10">
+            <Code className="h-10 w-10 mb-4 opacity-50" />
+            <p className="text-lg font-medium">등록된 코드 스타일 프리셋이 없습니다.</p>
+            <p className="text-sm mt-1">새로운 프리셋을 추가하여 팀의 코딩 컨벤션을 정의하세요.</p>
+            <Button onClick={handleCreate} variant="outline" className="mt-4">
+              <Plus className="h-4 w-4 mr-2" />
+              첫 프리셋 추가하기
+            </Button>
           </div>
         )}
       </div>
     </div>
-  );
-}
-
-function PresetForm({
-  preset,
-  onSave,
-  onCancel,
-}: {
-  preset: Partial<CodeStylePreset> | null;
-  onSave: (preset: Partial<CodeStylePreset>) => void;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState({
-    name: preset?.name || '',
-    language: preset?.language || 'typescript',
-    indentStyle: preset?.rules?.indentStyle || 'spaces',
-    indentSize: preset?.rules?.indentSize || 2,
-    quotes: preset?.rules?.quotes || 'single',
-    semicolons: preset?.rules?.semicolons !== false,
-    conventions: preset?.conventions || '',
-    isGlobal: preset?.isGlobal || false,
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({
-      name: form.name,
-      language: form.language,
-      rules: {
-        indentStyle: form.indentStyle,
-        indentSize: form.indentSize,
-        quotes: form.quotes,
-        semicolons: form.semicolons,
-      },
-      conventions: form.conventions,
-      isGlobal: form.isGlobal,
-    });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="p-4 rounded-lg border bg-card space-y-4">
-      <h3 className="font-medium">{preset?.id ? '프리셋 수정' : '새 프리셋 생성'}</h3>
-      
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">프리셋 이름 *</label>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">언어 *</label>
-          <select
-            value={form.language}
-            onChange={(e) => setForm({ ...form, language: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-          >
-            {LANGUAGES.map((lang) => (
-              <option key={lang} value={lang}>{lang}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">들여쓰기</label>
-          <select
-            value={form.indentStyle}
-            onChange={(e) => setForm({ ...form, indentStyle: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-          >
-            <option value="spaces">Spaces</option>
-            <option value="tabs">Tabs</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">크기</label>
-          <input
-            type="number"
-            value={form.indentSize}
-            onChange={(e) => setForm({ ...form, indentSize: parseInt(e.target.value) })}
-            className="w-full px-3 py-2 border rounded-md"
-            min={1}
-            max={8}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">따옴표</label>
-          <select
-            value={form.quotes}
-            onChange={(e) => setForm({ ...form, quotes: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-          >
-            <option value="single">Single (')</option>
-            <option value="double">Double (")</option>
-          </select>
-        </div>
-        <div className="flex items-end pb-2">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.semicolons}
-              onChange={(e) => setForm({ ...form, semicolons: e.target.checked })}
-            />
-            세미콜론
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-1">코딩 컨벤션</label>
-        <textarea
-          value={form.conventions}
-          onChange={(e) => setForm({ ...form, conventions: e.target.value })}
-          className="w-full px-3 py-2 border rounded-md"
-          rows={3}
-          placeholder="예: PascalCase for classes, camelCase for functions..."
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="isGlobal"
-          checked={form.isGlobal}
-          onChange={(e) => setForm({ ...form, isGlobal: e.target.checked })}
-        />
-        <label htmlFor="isGlobal" className="text-sm">전역 프리셋으로 설정</label>
-      </div>
-
-      <div className="flex gap-2 justify-end">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          취소
-        </Button>
-        <Button type="submit">
-          <Save className="h-4 w-4 mr-2" />
-          저장
-        </Button>
-      </div>
-    </form>
   );
 }

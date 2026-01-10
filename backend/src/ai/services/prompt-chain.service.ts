@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AIService } from '../ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ContextCollectorService, CodeContext } from './context-collector.service';
+import { CodeStyleService } from './code-style.service';
 
 export interface ChainInput {
   userPrompt: string;
@@ -49,6 +50,7 @@ export class PromptChainService {
     private readonly aiService: AIService,
     private readonly contextCollector: ContextCollectorService,
     private readonly prisma: PrismaService,
+    private readonly codeStyleService: CodeStyleService,
   ) {}
 
   /**
@@ -160,6 +162,11 @@ Provide your response in JSON format:
     design: DesignResult,
     stylePreset: any
   ): Promise<GenerateResult> {
+    // Generate full style instructions
+    const styleInstructions = stylePreset 
+      ? this.codeStyleService.generateConventionsSummary(stylePreset)
+      : '';
+
     const systemPrompt = `You are an expert ${input.language} developer. Generate clean, well-documented code based on the design plan.
 
 Design Plan:
@@ -169,7 +176,7 @@ Design Plan:
 Context:
 ${context.currentFile ? `Current file content (for reference):\n\`\`\`${context.currentFile.language}\n${context.currentFile.content.substring(0, 1000)}\n\`\`\`\n` : ''}
 
-${stylePreset ? `Code Style Requirements:\n${stylePreset.conventions}\n` : ''}
+${styleInstructions ? `Code Style Requirements:\n${styleInstructions}\n` : ''}
 
 Provide:
 1. The complete code wrapped in a code block
