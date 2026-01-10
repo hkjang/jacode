@@ -10,6 +10,8 @@ import { ConfigBackupService } from './services/config-backup.service';
 import { ContextCollectorService } from './services/context-collector.service';
 import { PromptChainService } from './services/prompt-chain.service';
 import { CodeStyleService } from './services/code-style.service';
+import { CircuitBreakerService } from './services/circuit-breaker.service';
+import { ModelRouterService } from './services/model-router.service';
 
 @Module({
   imports: [PrismaModule],
@@ -23,6 +25,8 @@ import { CodeStyleService } from './services/code-style.service';
     ContextCollectorService,
     PromptChainService,
     CodeStyleService,
+    CircuitBreakerService,
+    ModelRouterService,
   ],
   controllers: [AIController],
   exports: [
@@ -33,6 +37,8 @@ import { CodeStyleService } from './services/code-style.service';
     ContextCollectorService,
     PromptChainService,
     CodeStyleService,
+    CircuitBreakerService,
+    ModelRouterService,
   ],
 })
 export class AIModule {}

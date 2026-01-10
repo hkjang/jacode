@@ -12,6 +12,8 @@ export class AIService {
   private activeProvider: AIProviderType;
   private readonly logger = new Logger(AIService.name);
 
+  private modelRouter?: any; // Lazy loaded to avoid circular dependency
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -19,6 +21,18 @@ export class AIService {
     private readonly vllmProvider: VLLMProvider,
   ) {
     this.activeProvider = this.configService.get<AIProviderType>('AI_PROVIDER', 'ollama');
+  }
+
+  /**
+   * Get model router (lazy loaded)
+   */
+  private async getModelRouter() {
+    if (!this.modelRouter) {
+      const { ModelRouterService } = await import('./services/model-router.service');
+      const { CircuitBreakerService } = await import('./services/circuit-breaker.service');
+      this.modelRouter = new ModelRouterService(this.prisma, new CircuitBreakerService());
+    }
+    return this.modelRouter;
   }
 
   /**
@@ -46,9 +60,35 @@ export class AIService {
   }
 
   /**
-   * Chat completion
+   * Chat completion with optional intelligent routing
    */
-  async chat(messages: ChatMessage[], options?: Partial<ChatOptions>): Promise<ChatResponse> {
+  async chat(
+    messages: ChatMessage[],
+    options?: Partial<ChatOptions> & {
+      useRouter?: boolean;
+      promptType?: any;
+      complexity?: 'low' | 'medium' | 'high';
+    }
+  ): Promise<ChatResponse> {
+    // Use model router if enabled
+    if (options?.useRouter) {
+      try {
+        const router = await this.getModelRouter();
+        const selection = await router.selectModel({
+          promptType: options.promptType || 'code',
+          promptContent: messages[messages.length - 1]?.content || '',
+          complexity: options.complexity,
+        });
+
+        this.logger.log(`Router selected: ${selection.serverName} (${selection.reason})`);
+        
+        // TODO: Use selected server instead of default provider
+        // For now, fall through to default provider
+      } catch (error) {
+        this.logger.warn('Model routing failed, using default provider', error);
+      }
+    }
+
     return this.getProvider().chat(messages, options);
   }
 
