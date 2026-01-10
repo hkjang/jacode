@@ -706,3 +706,135 @@ enum CostAlertType {
   COST_LIMIT
   RATE_LIMIT // 시간당 요청 수
 }
+
+// ============================================================================
+// Phase 1: Advanced AI Features - Model Routing & Policies
+// ============================================================================
+
+model ModelRoutingPolicy {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  
+  // 라우팅 규칙: { promptType, modelCriteria, costWeight, performanceWeight }
+  rules       Json     @default("{}")
+  priority    Int      @default(0)
+  
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([priority])
+  @@map("model_routing_policies")
+}
+
+model CodeStylePreset {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  language    String
+  
+  // ESLint/Prettier config
+  rules       Json     @default("{}")
+  
+  // Coding convention 문서
+  conventions String   @db.Text
+  
+  teamId      String?
+  isGlobal    Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([language])
+  @@index([teamId])
+  @@index([isGlobal])
+  @@map("code_style_presets")
+}
+
+model AIWorkSnapshot {
+  id          String   @id @default(uuid())
+  
+  agentTaskId String
+  stepName    String
+  
+  // 변경 전 상태 (파일 내용, 설정 등)
+  beforeState Json     @default("{}")
+  
+  // 변경 후 상태
+  afterState  Json     @default("{}")
+  
+  // 추가 메타데이터
+  metadata    Json     @default("{}")
+  
+  createdAt   DateTime @default(now())
+
+  @@index([agentTaskId])
+  @@index([createdAt])
+  @@map("ai_work_snapshots")
+}
+
+model PromptExecution {
+  id             String   @id @default(uuid())
+  
+  // 사용된 템플릿 (optional)
+  templateId     String?
+  
+  // 실제 실행된 프롬프트 내용
+  promptContent  String   @db.Text
+  
+  // 모델 정보
+  modelName      String
+  provider       String
+  
+  // AI 응답
+  response       String   @db.Text
+  
+  // 신뢰도 점수 (0.0 ~ 1.0)
+  confidenceScore Float?
+  
+  // 품질 메트릭: { coherence, relevance, safety }
+  qualityMetrics Json     @default("{}")
+  
+  // 연관된 작업
+  agentTaskId    String?
+  
+  // 성능 메트릭
+  executionTimeMs Int     @default(0)
+  success        Boolean  @default(true)
+  errorMessage   String?
+  
+  createdAt      DateTime @default(now())
+
+  @@index([agentTaskId])
+  @@index([confidenceScore])
+  @@index([modelName])
+  @@index([createdAt])
+  @@map("prompt_executions")
+}
+
+model ConfigBackup {
+  id          String   @id @default(uuid())
+  
+  // 백업 카테고리
+  category    String   // "system_settings", "prompt_templates", "model_servers"
+  
+  // 전체 설정 스냅샷
+  snapshot    Json     @default("{}")
+  
+  // 백업 생성자
+  createdBy   String
+  createdByEmail String?
+  
+  // 백업 설명
+  description String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([category])
+  @@index([createdAt])
+  @@index([createdBy])
+  @@map("config_backups")
+}
+
