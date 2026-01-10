@@ -22,6 +22,7 @@ import {
   Heart,
   Database,
   ListTodo,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LanguageSelector, useI18n } from '@/contexts/I18nContext';
@@ -44,6 +45,7 @@ const navSections = [
       { href: '/admin/circuit-breakers', label: 'Circuit Breaker', icon: Heart },
       { href: '/admin/prompts', label: '프롬프트 템플릿', icon: FileText },
       { href: '/admin/code-styles', label: '코드 스타일', icon: Code },
+      { href: '/admin/chat', label: '채팅 기록', icon: MessageSquare },
     ]
   },
   {

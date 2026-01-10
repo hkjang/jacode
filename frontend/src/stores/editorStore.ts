@@ -33,6 +33,10 @@ interface EditorState {
   // Project
   currentProjectId: string | null;
   
+  // UI State
+  showAI: boolean;
+  showAgents: boolean;
+  
   // Memory management
   memoryStats: {
     totalCachedSize: number;
@@ -43,6 +47,8 @@ interface EditorState {
   // Actions
   setCurrentProject: (projectId: string) => void;
   setFileTree: (tree: FileTreeNode[]) => void;
+  toggleAI: (show?: boolean) => void;
+  toggleAgents: (show?: boolean) => void;
 
   openFile: (file: { id: string; path: string; name: string; content: string; language?: string }) => void;
   closeFile: (id: string) => void;
@@ -69,6 +75,8 @@ export const useEditorStore = create<EditorState>()(
       openTabs: [],
       activeTabId: null,
       currentProjectId: null,
+      showAI: false,
+      showAgents: false,
       memoryStats: {
         totalCachedSize: 0,
         cachedFileCount: 0,
@@ -76,12 +84,18 @@ export const useEditorStore = create<EditorState>()(
       },
 
       setCurrentProject: (projectId) => {
+        const { currentProjectId } = get();
+        if (currentProjectId === projectId) return;
+
         set({
           currentProjectId: projectId,
           files: new Map(),
           openTabs: [],
           activeTabId: null,
           fileTree: [],
+          // Keep UI settings
+          showAI: get().showAI,
+          showAgents: get().showAgents,
           memoryStats: {
             totalCachedSize: 0,
             cachedFileCount: 0,
@@ -92,6 +106,14 @@ export const useEditorStore = create<EditorState>()(
 
       setFileTree: (tree) => {
         set({ fileTree: tree });
+      },
+
+      toggleAI: (show) => {
+        set((state) => ({ showAI: show !== undefined ? show : !state.showAI }));
+      },
+
+      toggleAgents: (show) => {
+        set((state) => ({ showAgents: show !== undefined ? show : !state.showAgents }));
       },
 
       openFile: (file) => {
@@ -352,6 +374,8 @@ export const useEditorStore = create<EditorState>()(
       name: 'jacode-editor-store',
       partialize: (state) => ({
         currentProjectId: state.currentProjectId,
+        showAI: state.showAI,
+        showAgents: state.showAgents,
         openTabs: state.openTabs,
         activeTabId: state.activeTabId,
         // Save files with content for persistence (limit to dirty files to save space)

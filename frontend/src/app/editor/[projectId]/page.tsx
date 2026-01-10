@@ -45,12 +45,15 @@ export default function EditorPage() {
     updateFileContent,
     saveFile,
     setActiveTab,
+    showAI,
+    toggleAI,
+    showAgents,
+    toggleAgents,
   } = useEditorStore();
 
   const [projectName, setProjectName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showAI, setShowAI] = useState(false);
-  const [showAgents, setShowAgents] = useState(false);
+  // showAI and showAgents are now in editorStore
   const [showHistory, setShowHistory] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -154,7 +157,7 @@ export default function EditorPage() {
           <Button
             variant={showAgents ? 'secondary' : 'ghost'}
             size="sm"
-            onClick={() => setShowAgents(!showAgents)}
+            onClick={() => toggleAgents()}
           >
             <Bot className="h-4 w-4 mr-1" />
             Agents
@@ -162,7 +165,7 @@ export default function EditorPage() {
           <Button
             variant={showAI ? 'secondary' : 'ghost'}
             size="sm"
-            onClick={() => setShowAI(!showAI)}
+            onClick={() => toggleAI()}
           >
             <MessageSquare className="h-4 w-4 mr-1" />
             AI Chat
@@ -255,7 +258,7 @@ export default function EditorPage() {
                 <AIChat
                   projectId={projectId}
                   currentFile={activeFile}
-                  onClose={() => setShowAI(false)}
+                  onClose={() => toggleAI(false)}
                   onApplyCode={(code, mode) => {
                     if (activeFile) {
                       if (mode === 'replace') {
@@ -279,7 +282,7 @@ export default function EditorPage() {
               <Panel defaultSize={30} minSize={20} maxSize={50}>
                 <AgentPanel
                   projectId={projectId}
-                  onClose={() => setShowAgents(false)}
+                  onClose={() => toggleAgents(false)}
                 />
               </Panel>
             </>

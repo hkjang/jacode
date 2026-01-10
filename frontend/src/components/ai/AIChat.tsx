@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { aiApi } from '@/lib/api';
+import { aiApi, api } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import { AICodeBlock, DiffPreviewModal } from './AICodeBlock';
 
@@ -37,71 +37,50 @@ interface AIChatProps {
 // Chat API helper
 const chatApi = {
   async getSessions(projectId?: string): Promise<ChatSession[]> {
-    const token = localStorage.getItem('accessToken');
-    const url = projectId ? `/api/chat/sessions?projectId=${projectId}` : '/api/chat/sessions';
-    const res = await fetch(`http://localhost:4000${url}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.map((s: any) => ({
-      id: s.id,
-      title: s.title,
-      lastMessage: s.lastMessage,
-      updatedAt: s.updatedAt,
-      messageCount: s._count?.messages || 0,
-    }));
+    const params = projectId ? { projectId } : {};
+    try {
+      const { data } = await api.get('/api/chat/sessions', { params });
+      return data.map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        lastMessage: s.lastMessage,
+        updatedAt: s.updatedAt,
+        messageCount: s._count?.messages || 0,
+      }));
+    } catch (error) {
+      console.error('Failed to get sessions:', error);
+      return [];
+    }
   },
   
   async createSession(projectId?: string, title?: string): Promise<string> {
-    const token = localStorage.getItem('accessToken');
-    const res = await fetch('http://localhost:4000/api/chat/sessions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ projectId, title }),
-    });
-    const data = await res.json();
+    const { data } = await api.post('/api/chat/sessions', { projectId, title });
     return data.id;
   },
   
   async getSession(sessionId: string): Promise<{ messages: Message[] }> {
-    const token = localStorage.getItem('accessToken');
-    const res = await fetch(`http://localhost:4000/api/chat/sessions/${sessionId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return { messages: [] };
-    const data = await res.json();
-    return {
-      messages: (data.messages || []).map((m: any) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: new Date(m.createdAt),
-      })),
-    };
+    try {
+      const { data } = await api.get(`/api/chat/sessions/${sessionId}`);
+      return {
+        messages: (data.messages || []).map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+        })),
+      };
+    } catch (error) {
+      console.error('Failed to get session:', error);
+      return { messages: [] };
+    }
   },
   
   async addMessage(sessionId: string, role: string, content: string): Promise<void> {
-    const token = localStorage.getItem('accessToken');
-    await fetch(`http://localhost:4000/api/chat/sessions/${sessionId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ role, content }),
-    });
+    await api.post(`/api/chat/sessions/${sessionId}/messages`, { role, content });
   },
   
   async deleteSession(sessionId: string): Promise<void> {
-    const token = localStorage.getItem('accessToken');
-    await fetch(`http://localhost:4000/api/chat/sessions/${sessionId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    await api.delete(`/api/chat/sessions/${sessionId}`);
   },
 };
 
@@ -119,7 +98,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   // Load active session from localStorage on mount
   useEffect(() => {
     const savedSessionId = localStorage.getItem(`chat-session-${projectId}`);
-    if (savedSessionId) {
+    if (savedSessionId && savedSessionId !== 'undefined' && savedSessionId !== 'null') {
       loadSession(savedSessionId);
     }
     loadSessions();
@@ -166,7 +145,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
 
     // Create session if needed
     let sessionId = currentSessionId;
-    if (!sessionId) {
+    if (!sessionId || sessionId === 'undefined' || sessionId === 'null') {
       sessionId = await chatApi.createSession(projectId, input.substring(0, 50));
       setCurrentSessionId(sessionId);
       localStorage.setItem(`chat-session-${projectId}`, sessionId);

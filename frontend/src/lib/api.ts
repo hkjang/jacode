@@ -216,4 +216,32 @@ export const aiApi = {
   },
 };
 
+// Admin Chat API
+export const adminChatApi = {
+  getAllSessions: async (params?: { page?: number; limit?: number; userId?: string; projectId?: string }) => {
+    const { data } = await api.get('/api/admin/chat/sessions', { params });
+    return data;
+  },
+
+  getSession: async (id: string) => {
+    const { data } = await api.get(`/api/admin/chat/sessions/${id}`);
+    return data;
+  },
+
+  deleteSession: async (id: string) => {
+    const { data } = await api.delete(`/api/admin/chat/sessions/${id}`);
+    return data;
+  },
+
+  getStats: async () => {
+    const { data } = await api.get('/api/admin/chat/stats');
+    return data;
+  },
+
+  getAppliedCode: async (params?: { page?: number; limit?: number }) => {
+    const { data } = await api.get('/api/admin/chat/applied-code', { params });
+    return data;
+  },
+};
+
 export default api;

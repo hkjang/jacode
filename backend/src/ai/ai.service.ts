@@ -115,10 +115,9 @@ export class AIService {
           this.activeProvider = 'ollama';
         }
         // Apply settings from DB
-        const settings = defaultSettings.settings as any;
-        if (settings?.temperature) finalOptions.temperature = settings.temperature;
-        if (settings?.maxTokens) finalOptions.maxTokens = settings.maxTokens;
-        if (settings?.topP) finalOptions.topP = settings.topP;
+        if (defaultSettings.temperature) finalOptions.temperature = defaultSettings.temperature;
+        if (defaultSettings.maxTokens) finalOptions.maxTokens = defaultSettings.maxTokens;
+        if (defaultSettings.topP) finalOptions.topP = defaultSettings.topP;
       }
     }
 
