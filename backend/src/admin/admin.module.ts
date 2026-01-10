@@ -22,6 +22,7 @@ import { AuditLogService } from './services/audit-log.service';
 import { SettingsHistoryService } from './services/settings-history.service';
 import { BackupService } from './services/backup.service';
 import { QueueManagementService } from './services/queue-management.service';
+import { MonitoringService } from './services/monitoring.service';
 
 // Controllers
 import {
@@ -37,11 +38,14 @@ import { AuditController } from './controllers/audit.controller';
 import { BackupController } from './controllers/backup.controller';
 import { QueueController } from './controllers/queue.controller';
 import { CostAlertController } from './controllers/cost-alert.controller';
+import { MonitoringController } from './controllers/monitoring.controller';
+import { AIModule } from '../ai/ai.module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     BullModule.registerQueue({ name: 'agent-tasks' }),
+    AIModule,
   ],
   controllers: [
     AdminController,
@@ -56,6 +60,7 @@ import { CostAlertController } from './controllers/cost-alert.controller';
     BackupController,
     QueueController,
     CostAlertController,
+    MonitoringController,
   ],
   providers: [
     ModelServerService,
@@ -73,6 +78,7 @@ import { CostAlertController } from './controllers/cost-alert.controller';
     QueueManagementService,
     UsageAggregationService,
     CostAlertService,
+    MonitoringService,
   ],
   exports: [
     ModelServerService,

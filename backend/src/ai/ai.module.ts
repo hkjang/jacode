@@ -13,6 +13,7 @@ import { CodeStyleService } from './services/code-style.service';
 import { CircuitBreakerService } from './services/circuit-breaker.service';
 import { ModelRouterService } from './services/model-router.service';
 import { AutoRefactoringAgent } from './services/auto-refactoring.service';
+import { MultiFileEditorService } from './services/multi-file-editor.service';
 
 @Module({
   imports: [PrismaModule],
@@ -29,6 +30,7 @@ import { AutoRefactoringAgent } from './services/auto-refactoring.service';
     CircuitBreakerService,
     ModelRouterService,
     AutoRefactoringAgent,
+    MultiFileEditorService,
   ],
   controllers: [AIController],
   exports: [
@@ -42,6 +44,7 @@ import { AutoRefactoringAgent } from './services/auto-refactoring.service';
     CircuitBreakerService,
     ModelRouterService,
     AutoRefactoringAgent,
+    MultiFileEditorService,
   ],
 })
 export class AIModule {}
