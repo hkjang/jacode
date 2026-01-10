@@ -1,17 +1,25 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { aiApi } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
-import { AICodeBlock, DiffPreviewModal, extractCodeBlocks } from './AICodeBlock';
+import { AICodeBlock, DiffPreviewModal } from './AICodeBlock';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  lastMessage?: string;
+  updatedAt: string;
+  messageCount?: number;
 }
 
 interface AIChatProps {
@@ -26,20 +34,143 @@ interface AIChatProps {
   onApplyCode?: (code: string, mode: 'replace' | 'append' | 'insert') => void;
 }
 
+// Chat API helper
+const chatApi = {
+  async getSessions(projectId?: string): Promise<ChatSession[]> {
+    const token = localStorage.getItem('accessToken');
+    const url = projectId ? `/api/chat/sessions?projectId=${projectId}` : '/api/chat/sessions';
+    const res = await fetch(`http://localhost:4000${url}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.map((s: any) => ({
+      id: s.id,
+      title: s.title,
+      lastMessage: s.lastMessage,
+      updatedAt: s.updatedAt,
+      messageCount: s._count?.messages || 0,
+    }));
+  },
+  
+  async createSession(projectId?: string, title?: string): Promise<string> {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch('http://localhost:4000/api/chat/sessions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ projectId, title }),
+    });
+    const data = await res.json();
+    return data.id;
+  },
+  
+  async getSession(sessionId: string): Promise<{ messages: Message[] }> {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`http://localhost:4000/api/chat/sessions/${sessionId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { messages: [] };
+    const data = await res.json();
+    return {
+      messages: (data.messages || []).map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.createdAt),
+      })),
+    };
+  },
+  
+  async addMessage(sessionId: string, role: string, content: string): Promise<void> {
+    const token = localStorage.getItem('accessToken');
+    await fetch(`http://localhost:4000/api/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ role, content }),
+    });
+  },
+  
+  async deleteSession(sessionId: string): Promise<void> {
+    const token = localStorage.getItem('accessToken');
+    await fetch(`http://localhost:4000/api/chat/sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+};
+
 export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [pendingCode, setPendingCode] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load active session from localStorage on mount
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem(`chat-session-${projectId}`);
+    if (savedSessionId) {
+      loadSession(savedSessionId);
+    }
+    loadSessions();
+  }, [projectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const loadSessions = async () => {
+    const data = await chatApi.getSessions(projectId);
+    setSessions(data);
+  };
+
+  const loadSession = async (sessionId: string) => {
+    const data = await chatApi.getSession(sessionId);
+    setMessages(data.messages);
+    setCurrentSessionId(sessionId);
+    localStorage.setItem(`chat-session-${projectId}`, sessionId);
+    setShowHistory(false);
+  };
+
+  const createNewSession = async () => {
+    const sessionId = await chatApi.createSession(projectId, '새 대화');
+    setCurrentSessionId(sessionId);
+    setMessages([]);
+    localStorage.setItem(`chat-session-${projectId}`, sessionId);
+    loadSessions();
+    setShowHistory(false);
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    await chatApi.deleteSession(sessionId);
+    if (currentSessionId === sessionId) {
+      setCurrentSessionId(null);
+      setMessages([]);
+      localStorage.removeItem(`chat-session-${projectId}`);
+    }
+    loadSessions();
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+
+    // Create session if needed
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      sessionId = await chatApi.createSession(projectId, input.substring(0, 50));
+      setCurrentSessionId(sessionId);
+      localStorage.setItem(`chat-session-${projectId}`, sessionId);
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -51,6 +182,9 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
+
+    // Save user message to backend
+    await chatApi.addMessage(sessionId, 'user', input);
 
     try {
       const context = currentFile
@@ -74,6 +208,10 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Save assistant message to backend
+      await chatApi.addMessage(sessionId, 'assistant', response.content);
+      loadSessions(); // Refresh session list
     } catch (error) {
       console.error('Failed to get AI response:', error);
       const errorMessage: Message = {
@@ -93,7 +231,6 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       setPendingCode(code);
       setShowDiff(true);
     } else {
-      // No file open, just apply directly if callback exists
       onApplyCode?.(code, 'replace');
     }
   };
@@ -114,11 +251,6 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     setInput(`이 파일을 개선해주세요: ${currentFile.path}\n\n개선할 부분:\n1. 코드 품질 향상\n2. 성능 최적화\n3. 가독성 개선`);
   };
 
-  const handleExplainCode = async () => {
-    if (!currentFile) return;
-    setInput(`이 코드를 상세히 설명해주세요: ${currentFile.path}`);
-  };
-
   const handleRefactorCode = async () => {
     if (!currentFile) return;
     setInput(`이 코드를 리팩토링해주세요. 더 깔끔하고 유지보수하기 쉬운 코드로 변환: ${currentFile.path}`);
@@ -129,7 +261,11 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     setInput(`이 코드의 잠재적 버그와 문제점을 찾아서 수정해주세요: ${currentFile.path}`);
   };
 
-  // Custom renderer for markdown that adds Apply buttons to code blocks
+  const handleExplainCode = async () => {
+    if (!currentFile) return;
+    setInput(`이 코드를 상세히 설명해주세요: ${currentFile.path}`);
+  };
+
   const renderMarkdown = (content: string) => {
     return (
       <ReactMarkdown
@@ -140,7 +276,6 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
             const language = match ? match[1] : '';
             const codeContent = String(children).replace(/\n$/, '');
             
-            // Inline code
             if (!className) {
               return (
                 <code className="bg-background/50 px-1 rounded text-primary" {...props}>
@@ -149,7 +284,6 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
               );
             }
             
-            // Block code with Apply button
             return (
               <AICodeBlock
                 code={codeContent}
@@ -163,13 +297,9 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
               />
             );
           },
-          // Improve other elements
           p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
           ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-          h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
         }}
       >
         {content}
@@ -179,7 +309,6 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
 
   return (
     <div className="h-full flex flex-col bg-card border-l">
-      {/* Diff Preview Modal */}
       <DiffPreviewModal
         isOpen={showDiff}
         onClose={() => setShowDiff(false)}
@@ -196,28 +325,83 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
           <Sparkles className="h-4 w-4 text-purple-500" />
           <span className="font-medium text-sm">AI Coding Assistant</span>
         </div>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setShowHistory(!showHistory)}
+            title="채팅 이력"
+          >
+            <History className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={createNewSession}
+            title="새 대화"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
+      {/* History Panel */}
+      {showHistory && (
+        <div className="border-b max-h-48 overflow-auto">
+          <div className="p-2 text-xs font-medium text-muted-foreground">이전 대화</div>
+          {sessions.length === 0 ? (
+            <div className="p-4 text-sm text-muted-foreground text-center">대화 이력이 없습니다</div>
+          ) : (
+            sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`p-2 hover:bg-muted cursor-pointer flex items-center justify-between group ${
+                  session.id === currentSessionId ? 'bg-muted' : ''
+                }`}
+                onClick={() => loadSession(session.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{session.title}</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {session.lastMessage || '메시지 없음'}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteSession(session.id);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* Quick Actions */}
-      {currentFile && (
+      {currentFile && !showHistory && (
         <div className="p-2 border-b flex gap-1.5 flex-wrap">
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleGenerateCode}>
-            <Wand2 className="h-3 w-3 mr-1" />
-            개선
+            <Wand2 className="h-3 w-3 mr-1" />개선
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleRefactorCode}>
-            <Code className="h-3 w-3 mr-1" />
-            리팩토링
+            <Code className="h-3 w-3 mr-1" />리팩토링
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleFixBugs}>
             🐛 버그 수정
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExplainCode}>
-            <FileCode className="h-3 w-3 mr-1" />
-            설명
+            <FileCode className="h-3 w-3 mr-1" />설명
           </Button>
         </div>
       )}
@@ -232,9 +416,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
               코드를 생성하고, 바로 에디터에 적용하세요!
             </p>
             {currentFile && (
-              <div className="mt-4 p-2 bg-muted rounded text-xs">
-                📄 {currentFile.path}
-              </div>
+              <div className="mt-4 p-2 bg-muted rounded text-xs">📄 {currentFile.path}</div>
             )}
           </div>
         )}
@@ -251,11 +433,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
                   : 'bg-muted'
               }`}
             >
-              {message.role === 'assistant' ? (
-                renderMarkdown(message.content)
-              ) : (
-                message.content
-              )}
+              {message.role === 'assistant' ? renderMarkdown(message.content) : message.content}
             </div>
           </div>
         ))}
@@ -288,8 +466,8 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
             className="flex-1 h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             disabled={loading}
           />
-          <Button 
-            onClick={handleSend} 
+          <Button
+            onClick={handleSend}
             disabled={loading || !input.trim()}
             className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
           >

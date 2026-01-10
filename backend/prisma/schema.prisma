@@ -38,6 +38,7 @@ model User {
   knowledgeEntries KnowledgeEntry[]
   usageLogs        UsageLog[]
   activityLogs     ActivityLog[]
+  chatSessions     ChatSession[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -78,6 +79,7 @@ model Project {
   agentTasks       AgentTask[]
   snapshots        ProjectSnapshot[]
   knowledgeEntries KnowledgeEntry[]
+  chatSessions     ChatSession[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -838,3 +840,73 @@ model ConfigBackup {
   @@map("config_backups")
 }
 
+// ============================================================================
+// AI Chat History
+// ============================================================================
+
+model ChatSession {
+  id        String @id @default(uuid())
+  
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  
+  title     String @default("새 대화")
+  
+  // 마지막 메시지 요약 (목록 표시용)
+  lastMessage String?
+  
+  // 세션 메타데이터
+  metadata  Json @default("{}")
+  
+  isArchived Boolean @default(false)
+  
+  messages  ChatMessage[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String @id @default(uuid())
+  
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  role      ChatRole
+  content   String @db.Text
+  
+  // AI 모델 정보 (assistant 메시지인 경우)
+  modelName    String?
+  modelProvider String?
+  
+  // 토큰 사용량
+  promptTokens     Int @default(0)
+  completionTokens Int @default(0)
+  
+  // 응답 시간
+  responseTimeMs   Int @default(0)
+  
+  // 코드 적용 여부
+  codeApplied      Boolean @default(false)
+  appliedFilePath  String?
+  
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+enum ChatRole {
+  system
+  user
+  assistant
+}

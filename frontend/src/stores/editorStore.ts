@@ -352,7 +352,44 @@ export const useEditorStore = create<EditorState>()(
       name: 'jacode-editor-store',
       partialize: (state) => ({
         currentProjectId: state.currentProjectId,
+        openTabs: state.openTabs,
+        activeTabId: state.activeTabId,
+        // Save files with content for persistence (limit to dirty files to save space)
+        files: Array.from(state.files.entries()).map(([id, file]) => ({
+          id,
+          path: file.path,
+          name: file.name,
+          content: file.content,
+          language: file.language,
+          isDirty: file.isDirty,
+          originalContent: file.originalContent,
+        })),
       }),
+      // Custom merge to restore Map from array
+      merge: (persistedState: any, currentState: any) => {
+        if (persistedState && persistedState.files) {
+          const filesMap = new Map();
+          for (const file of persistedState.files) {
+            filesMap.set(file.id, {
+              ...file,
+              lastAccessTime: Date.now(),
+              isUnloaded: false,
+              contentSize: file.content?.length || 0,
+            });
+          }
+          return {
+            ...currentState,
+            ...persistedState,
+            files: filesMap,
+            memoryStats: {
+              totalCachedSize: persistedState.files.reduce((sum: number, f: any) => sum + (f.content?.length || 0), 0),
+              cachedFileCount: persistedState.files.length,
+              unloadedFileCount: 0,
+            },
+          };
+        }
+        return { ...currentState, ...persistedState };
+      },
     },
   ),
 );

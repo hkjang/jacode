@@ -50,6 +50,7 @@ import { AIProviderController } from './controllers/ai-provider.controller';
 import { PromptVersionController } from './controllers/prompt-version.controller';
 import { ConfigBackupController } from './controllers/config-backup.controller';
 import { CircuitBreakerController } from './controllers/circuit-breaker.controller';
+import { ChatHistoryController } from './controllers/chat-history.controller';
 import { AIModule } from '../ai/ai.module';
 
 @Module({
@@ -83,6 +84,7 @@ import { AIModule } from '../ai/ai.module';
     PromptVersionController,
     ConfigBackupController,
     CircuitBreakerController,
+    ChatHistoryController,
   ],
   providers: [
     ModelServerService,

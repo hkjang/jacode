@@ -12,6 +12,7 @@ import { QueueModule } from './queue/queue.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AdminModule } from './admin/admin.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AdminModule } from './admin/admin.module';
     MonitoringModule,
     KnowledgeModule,
     AdminModule,
+    ChatModule,
   ],
 })
 export class AppModule {}
