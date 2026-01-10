@@ -1,21 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
-import { OllamaProvider } from './providers/ollama.provider';
-import { VLLMProvider } from './providers/vllm.provider';
-import { ChatMessage, ChatOptions, ChatResponse, ChatStreamChunk } from './types';
-
-export type AIProviderType = 'ollama' | 'vllm';
-
-interface CachedModelSettings {
-  model: string;
-  provider: AIProviderType;
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  contextLength?: number;
-  cachedAt: number;
-}
+import { CircuitBreakerService } from './services/circuit-breaker.service';
 
 @Injectable()
 export class AIService {
@@ -33,6 +16,7 @@ export class AIService {
     private readonly prisma: PrismaService,
     private readonly ollamaProvider: OllamaProvider,
     private readonly vllmProvider: VLLMProvider,
+    private readonly circuitBreaker: CircuitBreakerService,
   ) {
     this.activeProvider = this.configService.get<AIProviderType>('AI_PROVIDER', 'ollama');
   }
@@ -43,8 +27,8 @@ export class AIService {
   private async getModelRouter() {
     if (!this.modelRouter) {
       const { ModelRouterService } = await import('./services/model-router.service');
-      const { CircuitBreakerService } = await import('./services/circuit-breaker.service');
-      this.modelRouter = new ModelRouterService(this.prisma, new CircuitBreakerService());
+      // Use the injected circuit breaker instance
+      this.modelRouter = new ModelRouterService(this.prisma, this.circuitBreaker);
     }
     return this.modelRouter;
   }
@@ -85,6 +69,17 @@ export class AIService {
     }
   ): Promise<ChatResponse> {
     // Use model router if enabled
+    // Circuit Breaker Check
+    const resourceId = options?.model || this.activeProvider === 'ollama' ? 'ollama-primary' : 'vllm-backup'; // Simple resource mapping
+    
+    if (this.circuitBreaker.isOpen(resourceId)) {
+      this.logger.warn(`Circuit is OPEN for ${resourceId}, rejecting request`);
+      throw new Error(`Service Unavailable: ${resourceId} is currently down (Circuit Open)`);
+    }
+
+    // Use model router if enabled
+    let selectedProvider = this.getProvider();
+    
     if (options?.useRouter) {
       try {
         const router = await this.getModelRouter();
@@ -96,8 +91,9 @@ export class AIService {
 
         this.logger.log(`Router selected: ${selection.serverName} (${selection.reason})`);
         
-        // TODO: Use selected server instead of default provider
-        // For now, fall through to default provider
+        // TODO: Actually switch provider based on selection.provider
+        // For now we just log it, but in full implementation we would get the correct provider instance
+        // selectedProvider = this.getProviderByName(selection.provider);
       } catch (error) {
         this.logger.warn('Model routing failed, using default provider', error);
       }
@@ -111,8 +107,10 @@ export class AIService {
         finalOptions.model = defaultSettings.model;
         if (defaultSettings.provider === 'vllm') {
           this.activeProvider = 'vllm';
+          selectedProvider = this.vllmProvider;
         } else {
           this.activeProvider = 'ollama';
+          selectedProvider = this.ollamaProvider;
         }
         // Apply settings from DB
         if (defaultSettings.temperature) finalOptions.temperature = defaultSettings.temperature;
@@ -121,7 +119,14 @@ export class AIService {
       }
     }
 
-    return this.getProvider().chat(messages, finalOptions);
+    try {
+      const result = await selectedProvider.chat(messages, finalOptions);
+      this.circuitBreaker.recordSuccess(resourceId);
+      return result;
+    } catch (error) {
+      this.circuitBreaker.recordFailure(resourceId);
+      throw error;
+    }
   }
 
   /**

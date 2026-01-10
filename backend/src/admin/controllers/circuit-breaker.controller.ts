@@ -1,39 +1,47 @@
 import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-
-// In-memory circuit breaker state for demo
-const circuitBreakers = new Map<string, { 
-  state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
-  failures: number;
-  successes: number;
-  lastStateChange: Date;
-}>();
+import { CircuitBreakerService } from '../../ai/services/circuit-breaker.service';
 
 @Controller('api/admin/circuit-breaker')
 @UseGuards(JwtAuthGuard)
 export class CircuitBreakerController {
+  constructor(private readonly circuitBreakerService: CircuitBreakerService) {}
+
   /**
    * Get all circuit breakers
    */
   @Get()
   async getAll() {
+    const states = this.circuitBreakerService.getAllStates();
     const result: any[] = [];
-    circuitBreakers.forEach((value, key) => {
+    
+    // Add known important circuits if they don't exist yet (for visibility)
+    // In a real app, these might be discovered dynamically or from config
+    const knownCircuits = ['ollama-primary', 'vllm-backup'];
+    for (const id of knownCircuits) {
+      if (!states.has(id)) {
+        // Just to show them in the list even if not triggered yet
+        // The service will create them on demand, but we can't force create without triggering
+        // For UI purposes, we'll only show active ones or we'd need a registry of all possible circuits
+      }
+    }
+
+    states.forEach((metrics, key) => {
       result.push({
-        id: key,
-        ...value,
+        resourceId: key,
+        ...metrics,
       });
     });
 
-    // Add some default ones if empty
-    if (result.length === 0) {
-      return [
-        { id: 'ollama-primary', state: 'CLOSED', failures: 0, successes: 100, lastStateChange: new Date() },
-        { id: 'vllm-backup', state: 'CLOSED', failures: 0, successes: 50, lastStateChange: new Date() },
-      ];
-    }
-
     return result;
+  }
+
+  /**
+   * Get circuit breaker configuration
+   */
+  @Get('config')
+  async getConfig() {
+    return this.circuitBreakerService.getConfig();
   }
 
   /**
@@ -41,11 +49,8 @@ export class CircuitBreakerController {
    */
   @Get(':id')
   async getOne(@Param('id') id: string) {
-    const cb = circuitBreakers.get(id);
-    if (cb) {
-      return { id, ...cb };
-    }
-    return { id, state: 'CLOSED', failures: 0, successes: 0, lastStateChange: new Date() };
+    const metrics = this.circuitBreakerService.getMetrics(id);
+    return { resourceId: id, ...metrics };
   }
 
   /**
@@ -53,12 +58,7 @@ export class CircuitBreakerController {
    */
   @Post(':id/reset')
   async reset(@Param('id') id: string) {
-    circuitBreakers.set(id, {
-      state: 'CLOSED',
-      failures: 0,
-      successes: 0,
-      lastStateChange: new Date(),
-    });
+    this.circuitBreakerService.reset(id);
     return { success: true, id };
   }
 
@@ -67,15 +67,7 @@ export class CircuitBreakerController {
    */
   @Post(':id/force-open')
   async forceOpen(@Param('id') id: string) {
-    const cb = circuitBreakers.get(id) || {
-      state: 'CLOSED',
-      failures: 0,
-      successes: 0,
-      lastStateChange: new Date(),
-    };
-    cb.state = 'OPEN';
-    cb.lastStateChange = new Date();
-    circuitBreakers.set(id, cb);
+    this.circuitBreakerService.forceOpen(id);
     return { success: true, id, state: 'OPEN' };
   }
 
@@ -84,16 +76,7 @@ export class CircuitBreakerController {
    */
   @Post(':id/force-close')
   async forceClose(@Param('id') id: string) {
-    const cb = circuitBreakers.get(id) || {
-      state: 'OPEN',
-      failures: 0,
-      successes: 0,
-      lastStateChange: new Date(),
-    };
-    cb.state = 'CLOSED';
-    cb.failures = 0;
-    cb.lastStateChange = new Date();
-    circuitBreakers.set(id, cb);
+    this.circuitBreakerService.forceClose(id);
     return { success: true, id, state: 'CLOSED' };
   }
 
@@ -102,8 +85,13 @@ export class CircuitBreakerController {
    */
   @Post('reset-all')
   async resetAll() {
-    circuitBreakers.clear();
-    return { success: true, message: 'All circuit breakers reset' };
+    // Ideally the service should support this, or we iterate current keys
+    // For now, we'll just reset known ones from the current state
+    const states = this.circuitBreakerService.getAllStates();
+    for (const id of states.keys()) {
+      this.circuitBreakerService.reset(id);
+    }
+    return { success: true, message: 'All active circuit breakers reset' };
   }
 
   /**
@@ -111,16 +99,18 @@ export class CircuitBreakerController {
    */
   @Get('stats/summary')
   async getStatistics() {
+    const states = this.circuitBreakerService.getAllStates();
     let closed = 0, open = 0, halfOpen = 0;
-    circuitBreakers.forEach((cb) => {
+    
+    states.forEach((cb) => {
       if (cb.state === 'CLOSED') closed++;
       else if (cb.state === 'OPEN') open++;
       else halfOpen++;
     });
 
     return {
-      total: circuitBreakers.size || 2,
-      closed: closed || 2,
+      total: states.size,
+      closed,
       open,
       halfOpen,
     };

@@ -206,4 +206,27 @@ export class CircuitBreakerService {
       circuit.totalRequests = 1;
     }
   }
+
+  /**
+   * Get circuit breaker configuration
+   */
+  getConfig(): CircuitBreakerConfig {
+    return { ...this.defaultConfig };
+  }
+
+  /**
+   * Force open a circuit (Admin)
+   */
+  forceOpen(resourceId: string): void {
+    this.transitionTo(resourceId, CircuitState.OPEN);
+    this.logger.warn(`Circuit ${resourceId} FORCE OPENED by admin`);
+  }
+
+  /**
+   * Force close a circuit (Admin)
+   */
+  forceClose(resourceId: string): void {
+    this.transitionTo(resourceId, CircuitState.CLOSED);
+    this.logger.warn(`Circuit ${resourceId} FORCE CLOSED by admin`);
+  }
 }

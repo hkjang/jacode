@@ -95,6 +95,9 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Circuit Breaker State
+  const [circuitStatus, setCircuitStatus] = useState<'CLOSED' | 'OPEN' | 'HALF_OPEN'>('CLOSED');
+
   // Load active session from localStorage on mount
   useEffect(() => {
     const savedSessionId = localStorage.getItem(`chat-session-${projectId}`);
@@ -102,11 +105,46 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       loadSession(savedSessionId);
     }
     loadSessions();
+
+    // Check circuit status and poll
+    checkCircuitStatus();
+    const interval = setInterval(checkCircuitStatus, 30000);
+    return () => clearInterval(interval);
   }, [projectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const checkCircuitStatus = async () => {
+    try {
+      // Check primary circuit status (ollama-primary) as proxy
+      const { data } = await api.get('/api/admin/circuit-breaker/ollama-primary');
+      if (data) {
+        setCircuitStatus(data.state);
+      }
+    } catch (e) {
+      // console.error('Failed to check circuit status');
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (circuitStatus) {
+      case 'CLOSED': return 'text-green-500';
+      case 'OPEN': return 'text-red-500';
+      case 'HALF_OPEN': return 'text-yellow-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getStatusText = () => {
+    switch (circuitStatus) {
+      case 'CLOSED': return 'System Normal';
+      case 'OPEN': return 'Circuit Open (Retrying...)';
+      case 'HALF_OPEN': return 'Recovering...';
+      default: return 'Unknown Status';
+    }
+  };
 
   const loadSessions = async () => {
     const data = await chatApi.getSessions(projectId);
@@ -142,6 +180,18 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+
+    // Check circuit before sending
+    if (circuitStatus === 'OPEN') {
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: '⚠️ AI Service is currently unavailable (Circuit Breaker OPEN). Please try again later.',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      return;
+    }
 
     // Create session if needed
     let sessionId = currentSessionId;
@@ -191,15 +241,32 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       // Save assistant message to backend
       await chatApi.addMessage(sessionId, 'assistant', response.content);
       loadSessions(); // Refresh session list
-    } catch (error) {
+
+      // If successful, ensure status is CLOSED
+      if (circuitStatus !== 'CLOSED') checkCircuitStatus();
+
+    } catch (error: any) {
       console.error('Failed to get AI response:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please make sure Ollama is running.',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      
+      // Check if it's a circuit breaker error
+      if (error?.response?.status === 503 || error?.message?.includes('Circuit Open')) {
+        setCircuitStatus('OPEN');
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '⚠️ AI Service temporarily unavailable (Circuit Breaker triggered).',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } else {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Sorry, I encountered an error. Please make sure Ollama is running.',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
       setLoading(false);
     }
@@ -303,7 +370,19 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       <div className="p-3 border-b flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-blue-500/10">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-purple-500" />
-          <span className="font-medium text-sm">AI Coding Assistant</span>
+          <div className="flex flex-col">
+            <span className="font-medium text-sm">AI Coding Assistant</span>
+            <div className="flex items-center gap-1.5" title={getStatusText()}>
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                circuitStatus === 'CLOSED' ? 'bg-green-500' : 
+                circuitStatus === 'OPEN' ? 'bg-red-500' : 
+                'bg-yellow-500 animate-pulse'
+              }`} />
+              <span className={`text-[10px] ${getStatusColor()}`}>
+                {circuitStatus === 'CLOSED' ? 'Online' : circuitStatus}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <Button
