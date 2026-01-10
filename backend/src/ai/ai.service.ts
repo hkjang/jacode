@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 import { OllamaProvider } from './providers/ollama.provider';
 import { VLLMProvider } from './providers/vllm.provider';
 import { ChatMessage, ChatOptions, ChatResponse, ChatStreamChunk } from './types';
@@ -9,9 +10,11 @@ export type AIProviderType = 'ollama' | 'vllm';
 @Injectable()
 export class AIService {
   private activeProvider: AIProviderType;
+  private readonly logger = new Logger(AIService.name);
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
     private readonly ollamaProvider: OllamaProvider,
     private readonly vllmProvider: VLLMProvider,
   ) {
@@ -61,12 +64,59 @@ export class AIService {
 
   /**
    * Generate code based on prompt
+   * Enhanced with multi-stage prompt chain
    */
   async generateCode(
     prompt: string,
     context?: string,
     language?: string,
-  ): Promise<{ code: string; explanation?: string }> {
+    options?: {
+      projectId?: string;
+      filePath?: string;
+      stylePresetId?: string;
+      useChain?: boolean; // Default true
+    }
+  ): Promise<{ 
+    code: string; 
+    explanation?: string;
+    confidenceScore?: number;
+    design?: any;
+    validation?: any;
+  }> {
+    // Use new prompt chain if project context is available
+    if (options?.useChain !== false && options?.projectId && options?.filePath) {
+      try {
+        const { PromptChainService } = await import('./services/prompt-chain.service');
+        const { ContextCollectorService } = await import('./services/context-collector.service');
+        
+        const promptChain = new PromptChainService(
+          this,
+          new ContextCollectorService(this.prisma),
+          this.prisma
+        );
+
+        const result = await promptChain.executeChain({
+          userPrompt: prompt,
+          projectId: options.projectId,
+          filePath: options.filePath,
+          language: language || 'typescript',
+          stylePresetId: options.stylePresetId,
+        });
+
+        return {
+          code: result.code,
+          explanation: result.design.approach,
+          confidenceScore: result.confidenceScore,
+          design: result.design,
+          validation: result.validation,
+        };
+      } catch (error) {
+        this.logger.warn('Prompt chain failed, falling back to legacy generation', error);
+        // Fall through to legacy implementation
+      }
+    }
+
+    // Legacy implementation (for backward compatibility)
     const systemPrompt = `You are an expert software developer. Generate clean, well-documented code.
 ${language ? `Language: ${language}` : ''}
 ${context ? `Context:\n${context}` : ''}

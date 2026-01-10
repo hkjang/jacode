@@ -7,6 +7,9 @@ import { VLLMProvider } from './providers/vllm.provider';
 import { ProviderRegistryService } from './services/provider-registry.service';
 import { PromptVersioningService } from './services/prompt-versioning.service';
 import { ConfigBackupService } from './services/config-backup.service';
+import { ContextCollectorService } from './services/context-collector.service';
+import { PromptChainService } from './services/prompt-chain.service';
+import { CodeStyleService } from './services/code-style.service';
 
 @Module({
   imports: [PrismaModule],
@@ -17,6 +20,9 @@ import { ConfigBackupService } from './services/config-backup.service';
     ProviderRegistryService,
     PromptVersioningService,
     ConfigBackupService,
+    ContextCollectorService,
+    PromptChainService,
+    CodeStyleService,
   ],
   controllers: [AIController],
   exports: [
@@ -24,6 +30,9 @@ import { ConfigBackupService } from './services/config-backup.service';
     ProviderRegistryService,
     PromptVersioningService,
     ConfigBackupService,
+    ContextCollectorService,
+    PromptChainService,
+    CodeStyleService,
   ],
 })
 export class AIModule {}
