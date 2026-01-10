@@ -22,6 +22,20 @@ export class ModelServerService {
     });
   }
 
+  async findByType(type: ServerType) {
+    return this.prisma.modelServer.findMany({
+      where: { type },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findActive() {
+    return this.prisma.modelServer.findMany({
+      where: { isActive: true },
+      orderBy: { routingWeight: 'desc' },
+    });
+  }
+
   async create(data: {
     name: string;
     type: ServerType;
@@ -60,6 +74,35 @@ export class ModelServerService {
     return this.prisma.modelServer.delete({
       where: { id },
     });
+  }
+
+  // ==================== Bulk Operations ====================
+
+  async bulkCreate(servers: Array<{
+    name: string;
+    type: ServerType;
+    url: string;
+    settings?: object;
+  }>) {
+    const results = await Promise.all(
+      servers.map(server => this.create(server))
+    );
+    return { created: results.length, servers: results };
+  }
+
+  async bulkDelete(ids: string[]) {
+    const result = await this.prisma.modelServer.deleteMany({
+      where: { id: { in: ids } },
+    });
+    return { deleted: result.count };
+  }
+
+  async bulkToggle(ids: string[], isActive: boolean) {
+    const result = await this.prisma.modelServer.updateMany({
+      where: { id: { in: ids } },
+      data: { isActive },
+    });
+    return { updated: result.count, isActive };
   }
 
   // ==================== Health Check ====================
@@ -128,7 +171,32 @@ export class ModelServerService {
     return results;
   }
 
-  // ==================== Ollama Specific ====================
+  async testConnection(url: string, type: ServerType): Promise<{ success: boolean; message: string; latency?: number }> {
+    const startTime = Date.now();
+    
+    try {
+      const endpoint = type === ServerType.VLLM 
+        ? `${url}/health`
+        : `${url}/api/tags`;
+
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const latency = Date.now() - startTime;
+
+      if (response.ok) {
+        return { success: true, message: 'Connection successful', latency };
+      } else {
+        return { success: false, message: `Server returned ${response.status}`, latency };
+      }
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Connection failed' };
+    }
+  }
+
+  // ==================== Ollama Model Management ====================
 
   async scanOllamaModels(serverId: string) {
     const server = await this.prisma.modelServer.findUnique({
@@ -155,4 +223,199 @@ export class ModelServerService {
       throw error;
     }
   }
+
+  async pullOllamaModel(serverId: string, modelName: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server || server.type !== ServerType.OLLAMA) {
+      throw new Error('Invalid Ollama server');
+    }
+
+    try {
+      const response = await fetch(`${server.url}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to pull model');
+      }
+
+      // Log action
+      await this.prisma.systemLog.create({
+        data: {
+          level: 'INFO',
+          category: 'model_management',
+          message: `Pulling model ${modelName} on server ${server.name}`,
+          context: { serverId, modelName },
+        },
+      });
+
+      return { success: true, message: `Started pulling ${modelName}` };
+    } catch (error: any) {
+      this.logger.error(`Failed to pull model: ${error}`);
+      throw error;
+    }
+  }
+
+  async deleteOllamaModel(serverId: string, modelName: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server || server.type !== ServerType.OLLAMA) {
+      throw new Error('Invalid Ollama server');
+    }
+
+    try {
+      const response = await fetch(`${server.url}/api/delete`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete model');
+      }
+
+      // Log action
+      await this.prisma.systemLog.create({
+        data: {
+          level: 'WARN',
+          category: 'model_management',
+          message: `Deleted model ${modelName} from server ${server.name}`,
+          context: { serverId, modelName },
+        },
+      });
+
+      return { success: true, message: `Deleted ${modelName}` };
+    } catch (error: any) {
+      this.logger.error(`Failed to delete model: ${error}`);
+      throw error;
+    }
+  }
+
+  async getOllamaModelInfo(serverId: string, modelName: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server || server.type !== ServerType.OLLAMA) {
+      throw new Error('Invalid Ollama server');
+    }
+
+    try {
+      const response = await fetch(`${server.url}/api/show`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get model info');
+      }
+
+      return response.json();
+    } catch (error: any) {
+      this.logger.error(`Failed to get model info: ${error}`);
+      throw error;
+    }
+  }
+
+  // ==================== Statistics ====================
+
+  async getServerStatistics(serverId: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server) {
+      throw new Error('Server not found');
+    }
+
+    // Get execution stats
+    const executions = await this.prisma.promptExecution.findMany({
+      where: {
+        provider: server.type.toLowerCase(),
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+    });
+
+    const totalExecutions = executions.length;
+    const successfulExecutions = executions.filter(e => e.success).length;
+    const avgExecutionTime = executions.length > 0
+      ? executions.reduce((sum, e) => sum + e.executionTimeMs, 0) / executions.length
+      : 0;
+    const avgConfidence = executions.length > 0
+      ? executions.reduce((sum, e) => sum + (e.confidenceScore || 0), 0) / executions.length
+      : 0;
+
+    return {
+      server,
+      statistics: {
+        totalExecutions,
+        successfulExecutions,
+        successRate: totalExecutions > 0 ? successfulExecutions / totalExecutions : 0,
+        avgExecutionTime: Math.round(avgExecutionTime),
+        avgConfidence,
+        lastHealthCheck: server.lastHealthCheck,
+        status: server.status,
+      },
+    };
+  }
+
+  async getGlobalStatistics() {
+    const servers = await this.prisma.modelServer.findMany();
+
+    const online = servers.filter(s => s.status === ServerStatus.ONLINE).length;
+    const offline = servers.filter(s => s.status === ServerStatus.OFFLINE).length;
+    const degraded = servers.filter(s => s.status === ServerStatus.DEGRADED).length;
+
+    const executions = await this.prisma.promptExecution.count({
+      where: {
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+
+    return {
+      totalServers: servers.length,
+      activeServers: servers.filter(s => s.isActive).length,
+      statusSummary: { online, offline, degraded },
+      executionsLast24h: executions,
+      serversByType: {
+        ollama: servers.filter(s => s.type === ServerType.OLLAMA).length,
+        vllm: servers.filter(s => s.type === ServerType.VLLM).length,
+      },
+    };
+  }
+
+  // ==================== Duplicate & Clone ====================
+
+  async duplicate(id: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id },
+    });
+
+    if (!server) {
+      throw new Error('Server not found');
+    }
+
+    const { id: _, createdAt, updatedAt, ...data } = server as any;
+
+    return this.prisma.modelServer.create({
+      data: {
+        ...data,
+        name: `${data.name} (Copy)`,
+        isActive: false,
+      },
+    });
+  }
 }
+

@@ -46,6 +46,10 @@ import { AutoRefactoringController } from './controllers/auto-refactoring.contro
 import { MultiFileEditorController } from './controllers/multi-file-editor.controller';
 import { BatchProcessingController } from './controllers/batch-processing.controller';
 import { CacheController } from './controllers/cache.controller';
+import { AIProviderController } from './controllers/ai-provider.controller';
+import { PromptVersionController } from './controllers/prompt-version.controller';
+import { ConfigBackupController } from './controllers/config-backup.controller';
+import { CircuitBreakerController } from './controllers/circuit-breaker.controller';
 import { AIModule } from '../ai/ai.module';
 
 @Module({
@@ -75,6 +79,10 @@ import { AIModule } from '../ai/ai.module';
     MultiFileEditorController,
     BatchProcessingController,
     CacheController,
+    AIProviderController,
+    PromptVersionController,
+    ConfigBackupController,
+    CircuitBreakerController,
   ],
   providers: [
     ModelServerService,
