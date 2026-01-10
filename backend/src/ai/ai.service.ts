@@ -89,7 +89,52 @@ export class AIService {
       }
     }
 
-    return this.getProvider().chat(messages, options);
+    // Get default model settings from DB if no model specified
+    const finalOptions = { ...options };
+    if (!finalOptions?.model) {
+      const defaultSettings = await this.getDefaultModelSettings();
+      if (defaultSettings) {
+        finalOptions.model = defaultSettings.model;
+        if (defaultSettings.provider === 'vllm') {
+          this.activeProvider = 'vllm';
+        } else {
+          this.activeProvider = 'ollama';
+        }
+        // Apply settings from DB
+        const settings = defaultSettings.settings as any;
+        if (settings?.temperature) finalOptions.temperature = settings.temperature;
+        if (settings?.maxTokens) finalOptions.maxTokens = settings.maxTokens;
+        if (settings?.topP) finalOptions.topP = settings.topP;
+      }
+    }
+
+    return this.getProvider().chat(messages, finalOptions);
+  }
+
+  /**
+   * Get default model settings from database
+   */
+  private async getDefaultModelSettings() {
+    try {
+      const defaultModel = await this.prisma.aIModelSetting.findFirst({
+        where: { isDefault: true, isActive: true },
+      });
+      
+      if (defaultModel) {
+        this.logger.log(`Using default model from DB: ${defaultModel.name} (${defaultModel.model})`);
+        return defaultModel;
+      }
+
+      // Fallback: get any active model
+      const anyActiveModel = await this.prisma.aIModelSetting.findFirst({
+        where: { isActive: true },
+      });
+      
+      return anyActiveModel;
+    } catch (error) {
+      this.logger.warn('Failed to get default model settings:', error);
+      return null;
+    }
   }
 
   /**

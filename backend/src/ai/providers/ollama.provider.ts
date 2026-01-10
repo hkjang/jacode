@@ -20,7 +20,7 @@ export class OllamaProvider implements OnModuleInit {
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl = this.configService.get('OLLAMA_BASE_URL', 'http://localhost:11434');
-    this.defaultModel = this.configService.get('OLLAMA_MODEL', 'codellama:13b');
+    this.defaultModel = this.configService.get('OLLAMA_MODEL', 'llama3.1:8b');
   }
 
   async onModuleInit() {
