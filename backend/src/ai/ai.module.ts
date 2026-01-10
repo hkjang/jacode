@@ -12,6 +12,7 @@ import { PromptChainService } from './services/prompt-chain.service';
 import { CodeStyleService } from './services/code-style.service';
 import { CircuitBreakerService } from './services/circuit-breaker.service';
 import { ModelRouterService } from './services/model-router.service';
+import { AutoRefactoringAgent } from './services/auto-refactoring.service';
 
 @Module({
   imports: [PrismaModule],
@@ -27,6 +28,7 @@ import { ModelRouterService } from './services/model-router.service';
     CodeStyleService,
     CircuitBreakerService,
     ModelRouterService,
+    AutoRefactoringAgent,
   ],
   controllers: [AIController],
   exports: [
@@ -39,6 +41,7 @@ import { ModelRouterService } from './services/model-router.service';
     CodeStyleService,
     CircuitBreakerService,
     ModelRouterService,
+    AutoRefactoringAgent,
   ],
 })
 export class AIModule {}

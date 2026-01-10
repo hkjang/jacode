@@ -115,6 +115,7 @@ export class AIService {
       filePath?: string;
       stylePresetId?: string;
       useChain?: boolean; // Default true
+      seed?: number; // For reproducible results
     }
   ): Promise<{ 
     code: string; 
@@ -163,10 +164,18 @@ ${context ? `Context:\n${context}` : ''}
 
 Respond with the code only, wrapped in a code block. Add brief comments explaining key parts.`;
 
+    const chatOptions: any = {};
+    
+    // Add seed for reproducibility if provided
+    if (options?.seed !== undefined) {
+      chatOptions.seed = options.seed;
+      this.logger.log(`Using seed ${options.seed} for reproducible generation`);
+    }
+
     const response = await this.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: prompt },
-    ]);
+    ], chatOptions);
 
     const code = this.extractCodeFromResponse(response.content);
     const explanation = this.extractExplanation(response.content);
