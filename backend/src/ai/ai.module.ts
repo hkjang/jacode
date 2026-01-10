@@ -14,6 +14,7 @@ import { CircuitBreakerService } from './services/circuit-breaker.service';
 import { ModelRouterService } from './services/model-router.service';
 import { AutoRefactoringAgent } from './services/auto-refactoring.service';
 import { MultiFileEditorService } from './services/multi-file-editor.service';
+import { BatchProcessingService } from './services/batch-processing.service';
 
 @Module({
   imports: [PrismaModule],
@@ -31,6 +32,7 @@ import { MultiFileEditorService } from './services/multi-file-editor.service';
     ModelRouterService,
     AutoRefactoringAgent,
     MultiFileEditorService,
+    BatchProcessingService,
   ],
   controllers: [AIController],
   exports: [
@@ -45,6 +47,7 @@ import { MultiFileEditorService } from './services/multi-file-editor.service';
     ModelRouterService,
     AutoRefactoringAgent,
     MultiFileEditorService,
+    BatchProcessingService,
   ],
 })
 export class AIModule {}

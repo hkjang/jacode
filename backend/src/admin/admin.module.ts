@@ -39,6 +39,13 @@ import { BackupController } from './controllers/backup.controller';
 import { QueueController } from './controllers/queue.controller';
 import { CostAlertController } from './controllers/cost-alert.controller';
 import { MonitoringController } from './controllers/monitoring.controller';
+import { CodeStyleController } from './controllers/code-style.controller';
+import { QuotaController } from './controllers/quota.controller';
+import { RoutingPolicyController } from './controllers/routing-policy.controller';
+import { AutoRefactoringController } from './controllers/auto-refactoring.controller';
+import { MultiFileEditorController } from './controllers/multi-file-editor.controller';
+import { BatchProcessingController } from './controllers/batch-processing.controller';
+import { CacheController } from './controllers/cache.controller';
 import { AIModule } from '../ai/ai.module';
 
 @Module({
@@ -61,6 +68,13 @@ import { AIModule } from '../ai/ai.module';
     QueueController,
     CostAlertController,
     MonitoringController,
+    CodeStyleController,
+    QuotaController,
+    RoutingPolicyController,
+    AutoRefactoringController,
+    MultiFileEditorController,
+    BatchProcessingController,
+    CacheController,
   ],
   providers: [
     ModelServerService,
