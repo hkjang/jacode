@@ -8,7 +8,14 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  StreamableFile,
+  Res,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
+import { Express } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -110,5 +117,35 @@ export class FileController {
     @Param('versionId') versionId: string,
   ) {
     return this.fileService.restoreVersion(id, projectId, versionId);
+  }
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Upload file' })
+  @ApiParam({ name: 'projectId', type: String })
+  async uploadFile(
+    @Param('projectId') projectId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('parentPath') parentPath?: string,
+  ) {
+    return this.fileService.uploadFile(projectId, file, parentPath);
+  }
+
+  @Get(':id/download')
+  @ApiOperation({ summary: 'Download file' })
+  @ApiParam({ name: 'projectId', type: String })
+  @ApiParam({ name: 'id', type: String })
+  async downloadFile(
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { name, content, mimeType } = await this.fileService.getDownloadData(id, projectId);
+
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${name}"`,
+    });
+
+    return new StreamableFile(content);
   }
 }

@@ -11,6 +11,7 @@ import {
   Trash2,
   Edit2,
   MoreHorizontal,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -38,6 +39,9 @@ interface FileExplorerProps {
   onCreateFile?: (parentPath: string, name: string, isDirectory: boolean) => void;
   onDeleteFile?: (file: FileTreeNode) => void;
   onRenameFile?: (file: FileTreeNode, newName: string) => void;
+  onUploadFile?: (file: File, parentPath?: string) => void;
+  onDownloadFile?: (file: FileTreeNode) => void;
+  onMoveFile?: (source: FileTreeNode, target: FileTreeNode) => void;
   className?: string;
 }
 
@@ -72,6 +76,9 @@ interface TreeNodeProps {
   onCreateFile?: (parentPath: string, name: string, isDirectory: boolean) => void;
   onDeleteFile?: (file: FileTreeNode) => void;
   onRenameFile?: (file: FileTreeNode, newName: string) => void;
+  onUploadFile?: (file: File, parentPath?: string) => void;
+  onDownloadFile?: (file: FileTreeNode) => void;
+  onMoveFile?: (source: FileTreeNode, target: FileTreeNode) => void;
 }
 
 function TreeNode({
@@ -84,6 +91,9 @@ function TreeNode({
   onCreateFile,
   onDeleteFile,
   onRenameFile,
+  onUploadFile,
+  onDownloadFile,
+  onMoveFile,
 }: TreeNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(node.name);
@@ -116,6 +126,42 @@ function TreeNode({
     }
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    e.dataTransfer.setData('sourceId', node.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (node.isDirectory) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Check if it's an internal move
+    const sourceId = e.dataTransfer.getData('sourceId');
+    if (sourceId && onMoveFile && node.isDirectory) {
+      // Cannot move to itself
+      if (sourceId !== node.id) {
+         onMoveFile({ id: sourceId } as FileTreeNode, node);
+      }
+      return;
+    }
+    
+    // Handle file upload drop on folder
+    if (onUploadFile && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+       Array.from(e.dataTransfer.files).forEach((file) => {
+        onUploadFile(file, node.path);
+      });
+    }
+  };
+
   return (
     <div>
       <ContextMenu>
@@ -127,6 +173,10 @@ function TreeNode({
             )}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={handleClick}
+            draggable={!isEditing}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
           >
             {/* Expand/collapse icon for directories */}
             {node.isDirectory ? (
@@ -225,6 +275,17 @@ function TreeNode({
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </ContextMenuItem>
+          {!node.isDirectory && onDownloadFile && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onClick={() => onDownloadFile(node)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </ContextMenuItem>
+            </>
+          )}
         </ContextMenuContent>
       </ContextMenu>
 
@@ -243,6 +304,9 @@ function TreeNode({
               onCreateFile={onCreateFile}
               onDeleteFile={onDeleteFile}
               onRenameFile={onRenameFile}
+              onUploadFile={onUploadFile}
+              onDownloadFile={onDownloadFile}
+              onMoveFile={onMoveFile}
             />
           ))}
         </div>
@@ -258,9 +322,38 @@ export function FileExplorer({
   onCreateFile,
   onDeleteFile,
   onRenameFile,
+  onUploadFile,
+  onDownloadFile,
+  onMoveFile,
   className,
 }: FileExplorerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (onUploadFile && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      Array.from(e.dataTransfer.files).forEach((file) => {
+        // Default to root upload for now
+        onUploadFile(file);
+      });
+    }
+  }, [onUploadFile]);
 
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedPaths((prev) => {
@@ -291,7 +384,16 @@ export function FileExplorer({
   }, [selectedPath]);
 
   return (
-    <div className={cn('py-2 select-none', className)}>
+    <div 
+      className={cn(
+        'py-2 select-none min-h-[200px] transition-colors', 
+        isDragging && 'bg-accent/20 border-2 border-dashed border-primary/50',
+        className
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {files.map((file) => (
         <TreeNode
           key={file.id}
@@ -304,6 +406,9 @@ export function FileExplorer({
           onCreateFile={onCreateFile}
           onDeleteFile={onDeleteFile}
           onRenameFile={onRenameFile}
+          onUploadFile={onUploadFile}
+          onDownloadFile={onDownloadFile}
+          onMoveFile={onMoveFile}
         />
       ))}
     </div>

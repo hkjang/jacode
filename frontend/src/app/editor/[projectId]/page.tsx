@@ -133,6 +133,71 @@ export default function EditorPage() {
     }
   };
 
+  const handleUploadFile = async (file: File, parentPath?: string) => {
+    try {
+      await fileApi.upload(projectId, file, parentPath);
+      const tree = await fileApi.getTree(projectId);
+      setFileTree(tree);
+    } catch (error) {
+      console.error('Failed to upload file:', error);
+    }
+  };
+
+  const handleDownloadFile = async (node: FileTreeNode) => {
+    try {
+      const response = await fileApi.download(projectId, node.id);
+      
+      // Create blob link to download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      // Use filename from node or header if possible, here using node.name
+      link.setAttribute('download', node.name);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download file:', error);
+      // Optional: Add toast error here
+    }
+  };
+
+  const handleMoveFile = async (source: FileTreeNode, target: FileTreeNode) => {
+    try {
+      // Find full source node from tree if needed, but we used ID in source
+      // Actually we need source name to construct new path
+      // Let's find the source node in fileTree
+      const findNode = (nodes: FileTreeNode[], id: string): FileTreeNode | undefined => {
+        for (const node of nodes) {
+          if (node.id === id) return node;
+          if (node.children) {
+            const found = findNode(node.children, id);
+            if (found) return found;
+          }
+        }
+        return undefined;
+      };
+
+      const sourceNode = findNode(fileTree, source.id);
+      if (!sourceNode) return;
+
+      const newPath = `${target.path}/${sourceNode.name}`;
+      
+      // Check if moving to same parent
+      const currentParent = sourceNode.path.split('/').slice(0, -1).join('/');
+      if (currentParent === target.path) return;
+
+      await fileApi.update(projectId, sourceNode.id, { path: newPath });
+      const tree = await fileApi.getTree(projectId);
+      setFileTree(tree);
+    } catch (error) {
+      console.error('Failed to move file:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
@@ -210,6 +275,9 @@ export default function EditorPage() {
                       onSelectFile={handleSelectFile}
                       onCreateFile={handleCreateFile}
                       onDeleteFile={handleDeleteFile}
+                      onUploadFile={handleUploadFile}
+                      onDownloadFile={handleDownloadFile}
+                      onMoveFile={handleMoveFile}
                     />
                   </div>
                 </div>

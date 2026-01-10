@@ -119,6 +119,25 @@ export const fileApi = {
     const { data } = await api.post(`/api/projects/${projectId}/files/${fileId}/versions/${versionId}/restore`);
     return data;
   },
+
+  upload: async (projectId: string, file: File, parentPath?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (parentPath) formData.append('parentPath', parentPath);
+    
+    const { data } = await api.post(`/api/projects/${projectId}/files/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return data;
+  },
+
+  download: async (projectId: string, fileId: string) => {
+    return api.get(`/api/projects/${projectId}/files/${fileId}/download`, {
+      responseType: 'blob',
+    });
+  },
 };
 
 // Agent API

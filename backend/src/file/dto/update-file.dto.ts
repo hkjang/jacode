@@ -21,4 +21,7 @@ export class UpdateFileDto {
   @IsOptional()
   @IsString()
   message?: string; // For version commit message
+
+  @IsOptional()
+  size?: number;
 }

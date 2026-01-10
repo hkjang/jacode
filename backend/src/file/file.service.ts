@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import * as path from 'path';
+import { Express } from 'express';
 
 @Injectable()
 export class FileService {
@@ -159,6 +160,35 @@ export class FileService {
           message: dto.message || 'Auto-saved version',
         },
       });
+      await this.prisma.fileVersion.create({
+        data: {
+          fileId: id,
+          version: (lastVersion?.version || 0) + 1,
+          content: file.content || '',
+          message: dto.message || 'Auto-saved version',
+        },
+      });
+    }
+
+    // Handle directory move/rename
+    if (file.isDirectory && dto.path && dto.path !== file.path) {
+      const oldPath = file.path;
+      const newPath = dto.path;
+      
+      const children = await this.prisma.file.findMany({
+        where: {
+          projectId,
+          path: { startsWith: oldPath + '/' },
+        },
+      });
+
+      for (const child of children) {
+        const newChildPath = child.path.replace(oldPath, newPath);
+        await this.prisma.file.update({
+          where: { id: child.id },
+          data: { path: newChildPath },
+        });
+      }
     }
 
     return this.prisma.file.update({
@@ -301,7 +331,78 @@ export class FileService {
       h: 'text/x-c',
       hpp: 'text/x-c++',
     };
-
     return mimeTypes[extension] || 'text/plain';
+  }
+
+  /**
+   * Upload file
+   */
+  async uploadFile(
+    projectId: string,
+    file: Express.Multer.File,
+    parentPath?: string,
+  ) {
+    if (!file) {
+      throw new NotFoundException('No file provided');
+    }
+
+    const fileName = file.originalname;
+    // Sanitize path to avoid double slashes
+    const cleanParentPath = parentPath === '/' || parentPath === '.' ? '' : parentPath;
+    const filePath = cleanParentPath 
+      ? `${cleanParentPath}/${fileName}` 
+      : fileName;
+
+    // Convert buffer to string - assuming text files for now due to DB schema constraint
+    // In a production app, we would check mime-type and store binary separately
+    const content = file.buffer.toString('utf-8');
+
+    // Check if file exists
+    const existing = await this.prisma.file.findFirst({
+      where: {
+        projectId,
+        path: filePath,
+      },
+    });
+
+    if (existing) {
+      // Update existing file
+      return this.update(existing.id, projectId, {
+        content,
+        size: content.length,
+      });
+    }
+
+    // Create new file
+    return this.create({
+      projectId,
+      path: filePath,
+      name: fileName,
+      content,
+      isDirectory: false,
+    });
+  }
+
+  /**
+   * Get file for download
+   */
+  async getDownloadData(id: string, projectId: string) {
+    const file = await this.prisma.file.findFirst({
+      where: { id, projectId },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (file.isDirectory) {
+      throw new ConflictException('Cannot download directory directly');
+    }
+
+    return {
+      name: file.name,
+      content: Buffer.from(file.content || ''),
+      mimeType: file.mimeType || 'text/plain',
+    };
   }
 }
