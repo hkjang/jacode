@@ -256,6 +256,17 @@ export default function EditorPage() {
                   projectId={projectId}
                   currentFile={activeFile}
                   onClose={() => setShowAI(false)}
+                  onApplyCode={(code, mode) => {
+                    if (activeFile) {
+                      if (mode === 'replace') {
+                        updateFileContent(activeFile.id, code);
+                      } else if (mode === 'append') {
+                        updateFileContent(activeFile.id, activeFile.content + '\n' + code);
+                      }
+                      // Auto-save after applying AI code
+                      handleSaveFile(mode === 'replace' ? code : activeFile.content + '\n' + code);
+                    }
+                  }}
                 />
               </Panel>
             </>

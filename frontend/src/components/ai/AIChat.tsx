@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, X, Sparkles, Code, FileCode, Loader2 } from 'lucide-react';
+import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { aiApi } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
+import { AICodeBlock, DiffPreviewModal, extractCodeBlocks } from './AICodeBlock';
 
 interface Message {
   id: string;
@@ -22,12 +23,15 @@ interface AIChatProps {
     language?: string;
   } | null;
   onClose: () => void;
+  onApplyCode?: (code: string, mode: 'replace' | 'append' | 'insert') => void;
 }
 
-export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
+export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [pendingCode, setPendingCode] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,7 +59,7 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
 
       const response = await aiApi.chat(
         [
-          ...(context ? [{ role: 'system', content: `You are a helpful coding assistant. ${context}` }] : []),
+          ...(context ? [{ role: 'system', content: `You are a helpful coding assistant. When providing code, always use markdown code blocks with the language specified. ${context}` }] : []),
           ...messages.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user', content: input },
         ],
@@ -84,23 +88,113 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
     }
   };
 
+  const handleApplyCode = (code: string) => {
+    if (currentFile) {
+      setPendingCode(code);
+      setShowDiff(true);
+    } else {
+      // No file open, just apply directly if callback exists
+      onApplyCode?.(code, 'replace');
+    }
+  };
+
+  const handleAcceptCode = () => {
+    onApplyCode?.(pendingCode, 'replace');
+    setShowDiff(false);
+    setPendingCode('');
+  };
+
+  const handleRejectCode = () => {
+    setShowDiff(false);
+    setPendingCode('');
+  };
+
   const handleGenerateCode = async () => {
     if (!currentFile) return;
-    setInput(`Generate code to improve this file: ${currentFile.path}`);
+    setInput(`이 파일을 개선해주세요: ${currentFile.path}\n\n개선할 부분:\n1. 코드 품질 향상\n2. 성능 최적화\n3. 가독성 개선`);
   };
 
   const handleExplainCode = async () => {
     if (!currentFile) return;
-    setInput(`Explain this code in detail: ${currentFile.path}`);
+    setInput(`이 코드를 상세히 설명해주세요: ${currentFile.path}`);
+  };
+
+  const handleRefactorCode = async () => {
+    if (!currentFile) return;
+    setInput(`이 코드를 리팩토링해주세요. 더 깔끔하고 유지보수하기 쉬운 코드로 변환: ${currentFile.path}`);
+  };
+
+  const handleFixBugs = async () => {
+    if (!currentFile) return;
+    setInput(`이 코드의 잠재적 버그와 문제점을 찾아서 수정해주세요: ${currentFile.path}`);
+  };
+
+  // Custom renderer for markdown that adds Apply buttons to code blocks
+  const renderMarkdown = (content: string) => {
+    return (
+      <ReactMarkdown
+        className="prose prose-sm dark:prose-invert max-w-none"
+        components={{
+          code: ({ node, className, children, ...props }) => {
+            const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+            const codeContent = String(children).replace(/\n$/, '');
+            
+            // Inline code
+            if (!className) {
+              return (
+                <code className="bg-background/50 px-1 rounded text-primary" {...props}>
+                  {children}
+                </code>
+              );
+            }
+            
+            // Block code with Apply button
+            return (
+              <AICodeBlock
+                code={codeContent}
+                language={language}
+                currentCode={currentFile?.content}
+                onApply={onApplyCode ? handleApplyCode : undefined}
+                onPreview={currentFile ? () => {
+                  setPendingCode(codeContent);
+                  setShowDiff(true);
+                } : undefined}
+              />
+            );
+          },
+          // Improve other elements
+          p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+          h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    );
   };
 
   return (
     <div className="h-full flex flex-col bg-card border-l">
+      {/* Diff Preview Modal */}
+      <DiffPreviewModal
+        isOpen={showDiff}
+        onClose={() => setShowDiff(false)}
+        originalCode={currentFile?.content || ''}
+        newCode={pendingCode}
+        fileName={currentFile?.path}
+        onAccept={handleAcceptCode}
+        onReject={handleRejectCode}
+      />
+
       {/* Header */}
-      <div className="p-3 border-b flex items-center justify-between">
+      <div className="p-3 border-b flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-blue-500/10">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">AI Assistant</span>
+          <Sparkles className="h-4 w-4 text-purple-500" />
+          <span className="font-medium text-sm">AI Coding Assistant</span>
         </div>
         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -109,14 +203,21 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
 
       {/* Quick Actions */}
       {currentFile && (
-        <div className="p-2 border-b flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleGenerateCode}>
-            <Code className="h-3 w-3 mr-1" />
-            Generate
+        <div className="p-2 border-b flex gap-1.5 flex-wrap">
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleGenerateCode}>
+            <Wand2 className="h-3 w-3 mr-1" />
+            개선
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExplainCode}>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleRefactorCode}>
+            <Code className="h-3 w-3 mr-1" />
+            리팩토링
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleFixBugs}>
+            🐛 버그 수정
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExplainCode}>
             <FileCode className="h-3 w-3 mr-1" />
-            Explain
+            설명
           </Button>
         </div>
       )}
@@ -125,9 +226,16 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center text-muted-foreground text-sm py-8">
-            <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-50" />
-            <p>Ask me anything about your code!</p>
-            <p className="text-xs mt-1">I can help with generation, explanation, debugging, and more.</p>
+            <Sparkles className="h-12 w-12 mx-auto mb-4 text-purple-500/50" />
+            <p className="font-medium">AI Vibe Coding</p>
+            <p className="text-xs mt-2 max-w-[200px] mx-auto">
+              코드를 생성하고, 바로 에디터에 적용하세요!
+            </p>
+            {currentFile && (
+              <div className="mt-4 p-2 bg-muted rounded text-xs">
+                📄 {currentFile.path}
+              </div>
+            )}
           </div>
         )}
 
@@ -137,32 +245,14 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+              className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
                 message.role === 'user'
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted'
               }`}
             >
               {message.role === 'assistant' ? (
-                <ReactMarkdown
-                  className="prose prose-sm dark:prose-invert max-w-none"
-                  components={{
-                    code: ({ node, className, children, ...props }) => {
-                      const isInline = !className;
-                      return isInline ? (
-                        <code className="bg-background/50 px-1 rounded" {...props}>
-                          {children}
-                        </code>
-                      ) : (
-                        <pre className="bg-background/50 p-2 rounded overflow-x-auto">
-                          <code {...props}>{children}</code>
-                        </pre>
-                      );
-                    },
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
+                renderMarkdown(message.content)
               ) : (
                 message.content
               )}
@@ -172,9 +262,13 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
 
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-muted rounded-lg px-3 py-2 text-sm flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Thinking...</span>
+            <div className="bg-muted rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </div>
+              <span className="text-muted-foreground">코드 생성 중...</span>
             </div>
           </div>
         )}
@@ -190,11 +284,15 @@ export function AIChat({ projectId, currentFile, onClose }: AIChatProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Ask anything..."
-            className="flex-1 h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="코드 생성 요청을 입력하세요..."
+            className="flex-1 h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
             disabled={loading}
           />
-          <Button size="sm" onClick={handleSend} disabled={loading || !input.trim()}>
+          <Button 
+            onClick={handleSend} 
+            disabled={loading || !input.trim()}
+            className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>
