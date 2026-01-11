@@ -56,6 +56,15 @@ export default function TasksPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskData | null>(null);
   
+  // New Task State
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+  const [newTask, setNewTask] = useState({
+    type: 'CODE_GENERATION',
+    prompt: '',
+    model: '',
+    priority: 1
+  });
+  
   // Filters
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,63 +130,6 @@ export default function TasksPage() {
     }
   };
 
-  const filteredTasks = tasks.filter(task => {
-    if (statusFilter !== 'ALL' && task.status !== statusFilter) return false;
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        task.prompt.toLowerCase().includes(query) ||
-        task.user?.name.toLowerCase().includes(query) ||
-        task.project?.name.toLowerCase().includes(query) ||
-        task.type.toLowerCase().includes(query)
-      );
-    }
-    return true;
-  });
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { ModelSelector } from '@/components/ai/ModelSelector';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-
-// ... existing imports
-
-export default function TasksPage() {
-  const [tasks, setTasks] = useState<TaskData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<TaskData | null>(null);
-  
-  // New Task State
-  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
-  const [newTask, setNewTask] = useState({
-    type: 'CODE_GENERATION',
-    prompt: '',
-    model: '',
-    priority: 1
-  });
-  
-  // Filters
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  // ... existing state
-
-  // ... existing functions
-
   const handleCreateTask = async () => {
     try {
       setActionLoading('create-task');
@@ -208,86 +160,112 @@ export default function TasksPage() {
     }
   };
 
-  // ... existing render
+  const filteredTasks = tasks.filter(task => {
+    if (statusFilter !== 'ALL' && task.status !== statusFilter) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        task.prompt.toLowerCase().includes(query) ||
+        task.user?.name.toLowerCase().includes(query) ||
+        task.project?.name.toLowerCase().includes(query) ||
+        task.type.toLowerCase().includes(query)
+      );
+    }
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Agent Tasks Management
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Monitor and manage AI agent tasks across all projects
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Dialog open={isNewTaskOpen} onOpenChange={setIsNewTaskOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Agent Task</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Task Type</Label>
-                  <Select 
-                    value={newTask.type} 
-                    onValueChange={(v) => setNewTask({...newTask, type: v})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CODE_GENERATION">Code Generation</SelectItem>
-                      <SelectItem value="CODE_MODIFICATION">Code Modification</SelectItem>
-                      <SelectItem value="CODE_REVIEW">Code Review</SelectItem>
-                      <SelectItem value="BUG_FIX">Bug Fix</SelectItem>
-                      <SelectItem value="REFACTORING">Refactoring</SelectItem>
-                      <SelectItem value="DOCUMENTATION">Documentation</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>AI Model</Label>
-                  <ModelSelector 
-                    value={newTask.model}
-                    onValueChange={(v) => setNewTask({...newTask, model: v})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                   <Label>Prompt</Label>
-                   <Textarea 
-                     placeholder="Describe the task..."
-                     value={newTask.prompt}
-                     onChange={(e) => setNewTask({...newTask, prompt: e.target.value})}
-                     className="min-h-[100px]"
-                   />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsNewTaskOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateTask} disabled={!newTask.prompt || actionLoading === 'create-task'}>
-                  {actionLoading === 'create-task' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create Task
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Button variant="outline" size="sm" onClick={loadTasks}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+      <div>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+        <Activity className="h-5 w-5" />
+        Agent Tasks Management
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+        Monitor and manage AI agent tasks across all projects
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Dialog open={isNewTaskOpen} onOpenChange={setIsNewTaskOpen}>
+        <DialogTrigger asChild>
+          <Button>
+          <Plus className="h-4 w-4 mr-2" />
+          New Task
           </Button>
-          {/* ... existing buttons ... */}
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+          <DialogTitle>Create New Agent Task</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Task Type</Label>
+            <Select 
+            value={newTask.type} 
+            onValueChange={(v) => setNewTask({...newTask, type: v})}
+            >
+            <SelectTrigger>
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CODE_GENERATION">Code Generation</SelectItem>
+              <SelectItem value="CODE_MODIFICATION">Code Modification</SelectItem>
+              <SelectItem value="CODE_REVIEW">Code Review</SelectItem>
+              <SelectItem value="BUG_FIX">Bug Fix</SelectItem>
+              <SelectItem value="REFACTORING">Refactoring</SelectItem>
+              <SelectItem value="DOCUMENTATION">Documentation</SelectItem>
+            </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label>AI Model</Label>
+            <ModelSelector 
+            value={newTask.model}
+            onValueChange={(v) => setNewTask({...newTask, model: v})}
+            />
+          </div>
+
+          <div className="space-y-2">
+             <Label>Prompt</Label>
+             <Textarea 
+               placeholder="Describe the task..."
+               value={newTask.prompt}
+               onChange={(e) => setNewTask({...newTask, prompt: e.target.value})}
+               className="min-h-[100px]"
+             />
+          </div>
+          </div>
+          <DialogFooter>
+          <Button variant="outline" onClick={() => setIsNewTaskOpen(false)}>Cancel</Button>
+          <Button onClick={handleCreateTask} disabled={!newTask.prompt || actionLoading === 'create-task'}>
+            {actionLoading === 'create-task' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Create Task
+          </Button>
+          </DialogFooter>
+        </DialogContent>
+        </Dialog>
+
+        <Button variant="outline" size="sm" onClick={loadTasks}>
+        <RefreshCw className="h-4 w-4 mr-2" />
+        Refresh
+        </Button>
+        
+        <Button variant="outline" size="sm" onClick={deleteOldTasks} disabled={actionLoading === 'delete-tasks'}>
+        <Trash2 className="h-4 w-4 mr-2" />
+        Cleanup
+        </Button>
+      </div>
+      </div>
 
       {/* Integration Info Banner */}
       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">

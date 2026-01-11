@@ -179,6 +179,11 @@ model AgentTask {
   model       String?  // Selected AI Model
   provider    String?  // Selected AI Provider
   
+  // New fields for enhanced agent system
+  maxSteps       Int     @default(20)   // Maximum ReAct loop iterations
+  currentStepNum Int     @default(0)    // Current step number
+  metadata       Json    @default("{}")  // Additional task metadata
+  
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   
@@ -186,6 +191,8 @@ model AgentTask {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   artifacts Artifact[]
+  steps     AgentStep[]    // ReAct execution steps
+  memories  AgentMemory[]  // Agent memory/context
   
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -224,6 +231,90 @@ enum AgentStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+// ============================================================================
+// Agent Execution Steps (ReAct Pattern Tracking)
+// ============================================================================
+
+model AgentStep {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  stepNumber  Int
+  type        AgentStepType
+  
+  thought     String?  @db.Text   // Agent's reasoning
+  toolName    String?             // Tool used
+  toolInput   Json?               // Tool input arguments
+  toolOutput  String?  @db.Text   // Tool output
+  observation String?  @db.Text   // Agent's observation
+  
+  durationMs  Int      @default(0)
+  error       String?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([taskId])
+  @@index([taskId, stepNumber])
+  @@map("agent_steps")
+}
+
+enum AgentStepType {
+  REASON
+  ACT
+  OBSERVE
+  PLAN
+  REFLECT
+}
+
+// ============================================================================
+// Agent Tool Configuration
+// ============================================================================
+
+model AgentTool {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  
+  isEnabled   Boolean  @default(true)
+  config      Json     @default("{}")
+  
+  // Usage statistics
+  usageCount  Int      @default(0)
+  lastUsedAt  DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("agent_tools")
+}
+
+// ============================================================================
+// Agent Memory (Conversation & Working Memory)
+// ============================================================================
+
+model AgentMemory {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  type        MemoryType
+  content     String   @db.Text
+  metadata    Json     @default("{}")
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([taskId])
+  @@index([taskId, type])
+  @@map("agent_memories")
+}
+
+enum MemoryType {
+  CONVERSATION
+  WORKING
+  SUMMARY
 }
 
 // ============================================================================

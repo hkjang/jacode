@@ -21,6 +21,8 @@ import { CreateAgentTaskDto } from './dto/create-agent-task.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AgentStatus } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
+import { ToolRegistryService } from './services/tool-registry.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('agents')
 @ApiBearerAuth()
@@ -30,6 +32,8 @@ export class AgentController {
   constructor(
     private readonly agentService: AgentService,
     private readonly queueService: QueueService,
+    private readonly toolRegistry: ToolRegistryService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post('tasks')
@@ -68,6 +72,79 @@ export class AgentController {
   async getTask(@Request() req: any, @Param('id') id: string) {
     return this.agentService.getTask(id, req.user.sub);
   }
+
+  // ============================================================================
+  // New Endpoints for Enhanced Agent System
+  // ============================================================================
+
+  @Get('tasks/:id/steps')
+  @ApiOperation({ summary: 'Get execution steps for a task' })
+  @ApiParam({ name: 'id', type: String })
+  async getTaskSteps(@Request() req: any, @Param('id') id: string) {
+    // Verify user owns the task
+    await this.agentService.getTask(id, req.user.sub);
+    
+    return this.prisma.agentStep.findMany({
+      where: { taskId: id },
+      orderBy: { stepNumber: 'asc' },
+    });
+  }
+
+  @Get('tasks/:id/memory')
+  @ApiOperation({ summary: 'Get memory/context for a task' })
+  @ApiParam({ name: 'id', type: String })
+  async getTaskMemory(@Request() req: any, @Param('id') id: string) {
+    // Verify user owns the task
+    await this.agentService.getTask(id, req.user.sub);
+    
+    return this.prisma.agentMemory.findMany({
+      where: { taskId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Get('tools')
+  @ApiOperation({ summary: 'Get list of registered tools' })
+  async getTools() {
+    const tools = this.toolRegistry.getAllTools();
+    
+    // Also get tool config from database
+    const dbTools = await this.prisma.agentTool.findMany();
+    const dbToolMap = new Map(dbTools.map(t => [t.name, t]));
+    
+    return tools.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      isEnabled: dbToolMap.get(tool.name)?.isEnabled ?? true,
+      usageCount: dbToolMap.get(tool.name)?.usageCount ?? 0,
+    }));
+  }
+
+  @Patch('tools/:name')
+  @ApiOperation({ summary: 'Enable or disable a tool' })
+  @ApiParam({ name: 'name', type: String })
+  async updateTool(
+    @Param('name') name: string,
+    @Body() body: { isEnabled?: boolean; config?: any },
+  ) {
+    return this.prisma.agentTool.upsert({
+      where: { name },
+      update: {
+        isEnabled: body.isEnabled,
+        config: body.config || {},
+      },
+      create: {
+        name,
+        isEnabled: body.isEnabled ?? true,
+        config: body.config || {},
+      },
+    });
+  }
+
+  // ============================================================================
+  // Original Endpoints
+  // ============================================================================
 
   @Post('tasks/:id/cancel')
   @ApiOperation({ summary: 'Cancel a task' })
