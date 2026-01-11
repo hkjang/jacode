@@ -132,11 +132,22 @@ export class OllamaProvider implements OnModuleInit {
         if (line.trim()) {
           try {
             const data = JSON.parse(line);
-            yield {
+            const chunk: ChatStreamChunk = {
               id: `ollama-${Date.now()}`,
               content: data.message?.content || '',
               done: data.done || false,
             };
+            
+            // Capture metrics on the final chunk
+            if (data.done) {
+               chunk.usage = {
+                 promptTokens: data.prompt_eval_count || 0,
+                 completionTokens: data.eval_count || 0,
+                 totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+               };
+            }
+            
+            yield chunk;
           } catch (e) {
             // Skip invalid JSON
           }

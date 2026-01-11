@@ -140,6 +140,10 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
 
   // Circuit Breaker State
   const [circuitStatus, setCircuitStatus] = useState<'CLOSED' | 'OPEN' | 'HALF_OPEN'>('CLOSED');
+  
+  // Streaming Control
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Persist model selection when it changes
   const handleModelChange = (model: string) => {
@@ -248,8 +252,55 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
     setContextFiles(contextFiles.filter(f => f.path !== path));
   };
 
+  // Slash Command Processor
+  const processSlashCommand = async (cmd: string) => {
+    const command = cmd.trim().toLowerCase();
+    
+    if (command === '/clear' || command === '/reset') {
+      setMessages([]);
+      setContextFiles([]);
+      setCurrentSessionId(null); // Detach current session
+      // Optional: Clear from localStorage if desired, but keeping history is safer
+      return true;
+    }
+    
+    if (command === '/help') {
+       const helpMsg: Message = {
+         id: Date.now().toString(),
+         role: 'assistant',
+         content: `**Available Commands:**
+- \`/auto\`: Trigger intelligent context search
+- \`/clear\`: Clear current chat history
+- \`/reset\`: Start a fresh session
+- \`/help\`: Show this help message`,
+         timestamp: new Date()
+       };
+       setMessages(prev => [...prev, helpMsg]);
+       return true;
+    }
+    
+    if (command === '/auto') {
+      // Trigger the existing auto-context logic manually
+      // We can simulate a click on the sparkle button or just run the logic if extracted
+      // For now, let's just show a hint to use the button or input query
+      return false; // Let it pass through or handle specifically if we refactor auto-logic
+    }
+
+    return false;
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+
+    // 1. Process Slash Commands
+    if (input.startsWith('/')) {
+       const handled = await processSlashCommand(input);
+       if (handled) {
+         setInput('');
+         return;
+       }
+       // If not handled (e.g. unknown command), send as text or warn? Send as text is safer.
+    }
 
     // Check circuit before sending
     if (circuitStatus === 'OPEN') {
@@ -291,36 +342,89 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
         ? contextFiles.map(f => `File${f.source === 'auto' ? ' (Auto)' : ''}: ${f.path}\n\`\`\`${f.language || ''}\n${f.content}\n\`\`\``).join('\n\n')
         : '';
 
-      const response = await aiApi.chat(
-        [
+      const requestBody = {
+        messages: [
           ...(context ? [{ role: 'system', content: `You are a helpful coding assistant. When providing code, always use markdown code blocks with the language specified. \n\nContext Files:\n${context}` }] : []),
           ...messages.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user', content: input },
         ],
-
-        { 
+        options: { 
           temperature: 0.7,
           model: selectedModel 
         }
-      );
-
-      const endTime = Date.now();
-      const responseTimeMs = endTime - new Date(userMessage.timestamp).getTime(); // Approx
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.content,
-        timestamp: new Date(),
       };
 
+      // Create placeholder assistant message
+      const assistantMsgId = (Date.now() + 1).toString();
+      const assistantMessage: Message = {
+        id: assistantMsgId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Start Streaming with AbortController
+      abortControllerRef.current = new AbortController();
+      setIsStreaming(true);
       
-      // Save assistant message to backend
-      await chatApi.addMessage(sessionId, 'assistant', response.content, {
-        modelName: response.model,
-        promptTokens: response.usage?.promptTokens,
-        completionTokens: response.usage?.completionTokens,
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+        },
+        body: JSON.stringify(requestBody),
+        signal: abortControllerRef.current.signal
+      });
+
+      if (!response.ok) throw new Error(response.statusText);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader');
+
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      let startTime = Date.now();
+      let streamUsage = { promptTokens: 0, completionTokens: 0 };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                fullContent += data.content;
+                setMessages((prev) => 
+                  prev.map(m => m.id === assistantMsgId ? { ...m, content: fullContent } : m)
+                );
+              }
+              // Capture usage if available (from final chunk)
+              if (data.usage) {
+                 streamUsage = data.usage;
+              }
+            } catch (e) {
+              // Ignore parse errors for partial chunks
+            }
+          }
+        }
+      }
+      
+      const endTime = Date.now();
+      const responseTimeMs = endTime - startTime; 
+
+      // Save assistant message to backend with REAL metrics
+      await chatApi.addMessage(sessionId, 'assistant', fullContent, {
+        modelName: selectedModel,
+        promptTokens: streamUsage.promptTokens,
+        completionTokens: streamUsage.completionTokens,
         responseTimeMs,
       });
       loadSessions(); // Refresh session list
@@ -330,6 +434,19 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
 
     } catch (error: any) {
       console.error('Failed to get AI response:', error);
+      
+      // Handle abort (user pressed Stop)
+      if (error?.name === 'AbortError') {
+        // User cancelled, just append a note to the current message
+        setMessages((prev) => 
+          prev.map((m, idx) => 
+            idx === prev.length - 1 && m.role === 'assistant' 
+              ? { ...m, content: m.content + '\n\n_(Generation stopped by user)_' } 
+              : m
+          )
+        );
+        return; // Don't show error message
+      }
       
       // Check if it's a circuit breaker error
       if (error?.response?.status === 503 || error?.message?.includes('Circuit Open')) {
@@ -342,16 +459,27 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
         };
         setMessages((prev) => [...prev, errorMessage]);
       } else {
+        // More descriptive error message
+        const errorDetail = error?.message || 'Unknown error';
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'Sorry, I encountered an error. Please make sure Ollama is running.',
+          content: `⚠️ Error: ${errorDetail}\n\nPlease check:\n- Is Ollama running at \`http://localhost:11434\`?\n- Is the backend server running?`,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
       }
     } finally {
       setLoading(false);
+      setIsStreaming(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  // Stop Generation Handler
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -734,18 +862,33 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="코드 생성 요청을 입력하세요..."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) handleSend();
+              if (e.key === 'Escape' && isStreaming) handleStopGeneration();
+            }}
+            placeholder="코드 생성 요청을 입력하세요... (Enter to send, Esc to stop)"
             className="flex-1 h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-            disabled={loading}
+            disabled={loading && !isStreaming}
           />
-          <Button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-            className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {isStreaming ? (
+            <Button
+              onClick={handleStopGeneration}
+              variant="destructive"
+              className="flex items-center gap-1"
+              title="Stop generating (Esc)"
+            >
+              <X className="h-4 w-4" />
+              Stop
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

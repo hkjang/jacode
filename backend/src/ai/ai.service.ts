@@ -258,7 +258,32 @@ export class AIService {
     options?: Partial<ChatOptions>,
   ): AsyncGenerator<ChatStreamChunk> {
     const configuredOptions = await this.getConfiguredOptions(options);
-    yield* this.getProvider().chatStream(messages, configuredOptions);
+    
+    // Determine provider from model string or DB settings
+    let provider = this.getProvider();
+    
+    if (configuredOptions.model) {
+      // Check if model is configured in DB with a specific provider
+      try {
+        const modelSetting = await this.prisma.aIModelSetting.findFirst({
+          where: { model: configuredOptions.model }
+        });
+        if (modelSetting?.provider === 'vllm') {
+          provider = this.vllmProvider;
+        } else if (modelSetting?.provider === 'ollama') {
+          provider = this.ollamaProvider;
+        }
+      } catch (e) {
+        // Fallback to heuristic
+      }
+      
+      // Fallback heuristic: vLLM models often contain HF-style paths
+      if (configuredOptions.model.includes('/')) {
+        provider = this.vllmProvider;
+      }
+    }
+    
+    yield* provider.chatStream(messages, configuredOptions);
   }
 
   /**
@@ -474,9 +499,11 @@ Format the response in Markdown.`;
 
   /**
    * Get list of active configured models for user selection
+   * Merges DB-configured models with dynamically discovered models from providers
    */
   async getActiveModels() {
-    const models = await this.prisma.aIModelSetting.findMany({
+    // 1. Get DB-configured models
+    const dbModels = await this.prisma.aIModelSetting.findMany({
       where: { isActive: true },
       select: {
         id: true,
@@ -487,7 +514,55 @@ Format the response in Markdown.`;
       },
       orderBy: { isDefault: 'desc' },
     });
-    return models;
+    
+    // 2. Also discover models from live providers
+    const discoveredModels: { id: string; name: string; model: string; provider: string; isDefault: boolean }[] = [];
+    
+    try {
+      // Ollama
+      const ollamaInfo = this.ollamaProvider.getInfo();
+      if (ollamaInfo.isAvailable) {
+        const ollamaModels = await this.ollamaProvider.listModels();
+        for (const modelName of ollamaModels.models) {
+          // Skip if already in DB
+          if (!dbModels.some(m => m.model === modelName)) {
+            discoveredModels.push({
+              id: `ollama-${modelName}`,
+              name: modelName,
+              model: modelName,
+              provider: 'ollama',
+              isDefault: false
+            });
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.warn('Failed to discover Ollama models', e);
+    }
+    
+    try {
+      // vLLM
+      const vllmInfo = this.vllmProvider.getInfo();
+      if (vllmInfo.isAvailable) {
+        const vllmModels = await this.vllmProvider.listModels();
+        for (const modelName of vllmModels.models) {
+          // Skip if already in DB
+          if (!dbModels.some(m => m.model === modelName)) {
+            discoveredModels.push({
+              id: `vllm-${modelName}`,
+              name: modelName,
+              model: modelName,
+              provider: 'vllm',
+              isDefault: false
+            });
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.warn('Failed to discover vLLM models', e);
+    }
+    
+    return [...dbModels, ...discoveredModels];
   }
 
   /**
