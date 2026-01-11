@@ -181,11 +181,11 @@ export class MonitoringService {
   /**
    * Get model performance report
    */
-  async getModelPerformanceReport() {
+  async getModelPerformanceReport(days: number = 7) {
     const executions = await this.prisma.promptExecution.findMany({
       where: {
         createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+          gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000), 
         },
       },
     });

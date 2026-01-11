@@ -27,8 +27,8 @@ export class MonitoringController {
    * Get model performance report
    */
   @Get('models/performance')
-  async getModelPerformance() {
-    return this.monitoringService.getModelPerformanceReport();
+  async getModelPerformance(@Query('days') days?: number) {
+    return this.monitoringService.getModelPerformanceReport(days ? Number(days) : 7);
   }
 
   /**
