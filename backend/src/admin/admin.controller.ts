@@ -28,8 +28,22 @@ export class AdminController {
   @Get('stats')
   @ApiOperation({ summary: 'Get system statistics' })
   async getStats() {
+    // Calculate dates
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    
+    // Previous period counts for trends
+    const [
+      prevUsers,
+      prevProjects,
+      prevTasks
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { createdAt: { lt: todayStart } } }),
+      this.prisma.project.count({ where: { updatedAt: { lt: todayStart, gte: yesterdayStart } } }),
+      this.prisma.agentTask.count({ where: { createdAt: { lt: todayStart, gte: yesterdayStart } } }),
+    ]);
 
     const [
       totalUsers,
@@ -69,6 +83,19 @@ export class AdminController {
       this.prisma.knowledgeEntry.count({ where: { type: 'PROMPT_TEMPLATE' } }),
     ]);
 
+    // Calculate trends
+    const calculateTrend = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? '+100%' : '0%';
+        const diff = current - previous;
+        const percent = (diff / previous) * 100;
+        return (percent > 0 ? '+' : '') + percent.toFixed(1) + '%';
+    };
+    
+    // For tasks, we compare yesterday's total tasks vs today's total tasks (approximated by total - yesterday total? No, need daily count)
+    // Actually we need 'tasks created today' vs 'tasks created yesterday' for a meaningful trend.
+    // Let's count tasks created today.
+    const tasksToday = await this.prisma.agentTask.count({ where: { createdAt: { gte: todayStart } } });
+
     // Calculate uptime
     const uptimeSeconds = process.uptime();
     const days = Math.floor(uptimeSeconds / 86400);
@@ -85,10 +112,12 @@ export class AdminController {
         total: totalUsers,
         admins: adminUsers,
         active: totalUsers,
+        trend: calculateTrend(totalUsers, prevUsers),
       },
       projects: {
         total: totalProjects,
         activeToday: activeProjects,
+        trend: calculateTrend(activeProjects, prevProjects),
       },
       tasks: {
         total: totalTasks,
@@ -96,6 +125,7 @@ export class AdminController {
         executing: executingTasks,
         completed: completedTasks,
         failed: failedTasks,
+        trend: calculateTrend(tasksToday, prevTasks),
       },
       artifacts: {
         total: totalArtifacts,

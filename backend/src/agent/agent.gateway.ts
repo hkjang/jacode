@@ -84,6 +84,7 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
   notifyTaskCreated(task: any) {
     this.server.to(`user:${task.userId}`).emit('task:created', task);
     this.server.to(`project:${task.projectId}`).emit('task:created', task);
+    this.notifyDashboardUpdate({ type: 'REFRESH', source: 'task:created' });
   }
 
   /**
@@ -113,6 +114,7 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
   notifyTaskCompleted(task: any) {
     this.server.to(`user:${task.userId}`).emit('task:completed', task);
     this.server.to(`project:${task.projectId}`).emit('task:completed', task);
+    this.notifyDashboardUpdate({ type: 'REFRESH', source: 'task:completed' });
   }
 
   /**
@@ -127,6 +129,7 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
       taskId: task.id,
       error: task.error,
     });
+    this.notifyDashboardUpdate({ type: 'REFRESH', source: 'task:failed' });
   }
 
   /**
@@ -135,6 +138,17 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
   notifyArtifactCreated(artifact: any, userId: string, projectId: string) {
     this.server.to(`user:${userId}`).emit('artifact:created', artifact);
     this.server.to(`project:${projectId}`).emit('artifact:created', artifact);
+    this.notifyDashboardUpdate({ type: 'REFRESH', source: 'artifact:created' });
+  }
+
+  @SubscribeMessage('subscribe-dashboard')
+  handleSubscribeDashboard(@ConnectedSocket() client: Socket) {
+      client.join('admin-dashboard');
+      this.logger.log(`Client ${client.id} subscribed to admin-dashboard`);
+  }
+
+  notifyDashboardUpdate(data: any) {
+      this.server.to('admin-dashboard').emit('dashboard:update', data);
   }
 
   /**
