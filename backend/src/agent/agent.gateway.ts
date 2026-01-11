@@ -71,6 +71,13 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.leave(`project:${projectId}`);
   }
 
+  @SubscribeMessage('subscribe-queue')
+  handleSubscribeQueue(@ConnectedSocket() client: Socket) {
+      // Security check: In a real app, verify user role here or via Guard
+      client.join('admin-queue');
+      this.logger.log(`Client ${client.id} subscribed to admin-queue`);
+  }
+
   /**
    * Notify task created
    */

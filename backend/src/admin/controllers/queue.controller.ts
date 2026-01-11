@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Query,
+  Body,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -85,5 +86,23 @@ export class QueueController {
   @ApiOperation({ summary: 'Resume the queue' })
   resumeQueue() {
     return this.queueService.resumeQueue();
+  }
+
+  @Post('test-job')
+  @ApiOperation({ summary: 'Create a test job' })
+  createTestJob() {
+    return this.queueService.createTestJob();
+  }
+
+  @Post('bulk/retry')
+  @ApiOperation({ summary: 'Bulk retry failed jobs' })
+  bulkRetry(@Body() body: { ids: string[] }) {
+      return this.queueService.bulkRetry(body.ids);
+  }
+
+  @Post('bulk/remove')
+  @ApiOperation({ summary: 'Bulk remove jobs' })
+  bulkRemove(@Body() body: { ids: string[] }) {
+      return this.queueService.bulkRemove(body.ids);
   }
 }

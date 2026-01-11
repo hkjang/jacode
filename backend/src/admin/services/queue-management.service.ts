@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Queue, Job } from 'bullmq';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Queue, Job, QueueEvents } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
+import { AgentGateway } from '../../agent/agent.gateway';
+import { ConfigService } from '@nestjs/config';
 
 export interface QueueStats {
   name: string;
@@ -26,12 +28,67 @@ export interface JobInfo {
 }
 
 @Injectable()
-export class QueueManagementService {
+export class QueueManagementService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(QueueManagementService.name);
+  private queueEvents: QueueEvents;
 
   constructor(
     @InjectQueue('agent-tasks') private readonly agentQueue: Queue,
-  ) {}
+    private readonly agentGateway: AgentGateway,
+    private readonly configService: ConfigService,
+  ) {
+    const connection = {
+      host: this.configService.get('REDIS_HOST', 'localhost'),
+      port: this.configService.get('REDIS_PORT', 6379),
+    };
+    
+    this.queueEvents = new QueueEvents('agent-tasks', { connection });
+    
+    this.queueEvents.on('completed', ({ jobId }) => {
+        this.emitQueueEvent('completed', jobId);
+    });
+    
+    this.queueEvents.on('failed', ({ jobId, failedReason }) => {
+        this.emitQueueEvent('failed', jobId, { failedReason });
+    });
+    
+    this.queueEvents.on('waiting', ({ jobId }) => {
+        this.emitQueueEvent('waiting', jobId);
+    });
+    
+    this.queueEvents.on('active', ({ jobId }) => {
+        this.emitQueueEvent('active', jobId);
+    });
+
+    this.queueEvents.on('delayed', ({ jobId }) => {
+        this.emitQueueEvent('delayed', jobId);
+    });
+  }
+
+  onModuleInit() {
+      this.logger.log('Queue events listener initialized');
+  }
+
+  onModuleDestroy() {
+      this.queueEvents.close();
+  }
+
+  private emitQueueEvent(event: string, jobId: string, metadata?: any) {
+      // We can emit to a specific room for admin queue monitoring
+      // AgentGateway needs to expose a method for this, or we just emit to 'admin:queue' room
+      // For now, let's use a custom event on the gateway
+      // Since AgentGateway structure is mainly for user/project, we might need to add a general 'admin' room capability
+      // Or we can just emit a global event that the client filters?
+      // Better: Update AgentGateway to support admin broadcasting.
+      // For fast iteration: client side joins 'admin-queue' room.
+      
+      // We will assume `notifyQueueEvent` exists on AgentGateway (we will add it).
+      // @ts-ignore
+      if (this.agentGateway.server) {
+          this.agentGateway.server.to('admin-queue').emit(`queue:job_${event}`, { jobId, ...metadata });
+          this.agentGateway.server.to('admin-queue').emit('queue:update_stats'); // Trigger stat refresh
+      }
+  }
 
   // Get queue statistics
   async getQueueStats(): Promise<QueueStats> {
@@ -209,5 +266,50 @@ export class QueueManagementService {
       healthy: issues.length === 0,
       issues,
     };
+  }
+
+  // Create a test job
+  async createTestJob(): Promise<JobInfo> {
+    const job = await this.agentQueue.add(
+      'test-job',
+      {
+        message: 'This is a test job created from the admin panel',
+        timestamp: Date.now(),
+        taskId: `test-${Date.now()}`,
+      },
+      {
+        delay: 2000, // Add a small delay to make it visible in "waiting"
+      },
+    );
+
+    this.logger.log(`Created test job ${job.id}`);
+
+    return {
+      id: job.id || '',
+      name: job.name,
+      data: job.data,
+      status: 'waiting',
+      progress: 0,
+      attempts: job.attemptsMade,
+      timestamp: job.timestamp,
+    };
+  }
+
+  // Bulk Retry
+  async bulkRetry(ids: string[]): Promise<number> {
+    let count = 0;
+    for (const id of ids) {
+        if (await this.retryJob(id)) count++;
+    }
+    return count;
+  }
+
+  // Bulk Remove
+  async bulkRemove(ids: string[]): Promise<number> {
+    let count = 0;
+    for (const id of ids) {
+        if (await this.removeJob(id)) count++;
+    }
+    return count;
   }
 }

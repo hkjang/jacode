@@ -3,9 +3,7 @@ import {
   Get,
   Post,
   Patch,
-  Post,
   Put,
-  Patch,
   Delete,
   Param,
   Body,
@@ -178,9 +176,6 @@ export class AdminController {
     };
   }
 
-      },
-    };
-  }
 
   @Get('projects/:id')
   @ApiOperation({ summary: 'Get a single project details (Admin)' })
@@ -190,14 +185,12 @@ export class AdminController {
       include: {
         user: { select: { id: true, email: true, name: true } },
         files: { select: { id: true, name: true, path: true, updatedAt: true } },
-        agentTasks: { select: { id: true, description: true, status: true, createdAt: true } },
+        agentTasks: { select: { id: true, status: true, createdAt: true } },
       },
     });
   }
 
-      },
-    });
-  }
+
 
   @Patch('projects/:id')
   @ApiOperation({ summary: 'Update a project (Admin)' })

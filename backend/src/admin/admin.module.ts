@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { AdminController } from './admin.controller';
 import { FeatureToggleModule } from './feature-toggle.module';
+import { AgentModule } from '../agent/agent.module';
 
 // Services
 import {
@@ -58,6 +59,7 @@ import { AIModule } from '../ai/ai.module';
     BullModule.registerQueue({ name: 'agent-tasks' }),
     AIModule,
     FeatureToggleModule,
+    AgentModule,
   ],
   controllers: [
     AdminController,
