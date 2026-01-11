@@ -37,6 +37,27 @@ export class AIController {
     return this.contextCollector.searchRelevantFiles(dto.projectId, dto.query);
   }
 
+  @Post('context/strategic')
+  @ApiOperation({ summary: 'Gather strategic context for AI operations' })
+  async gatherStrategicContext(@Body() dto: { 
+    projectId: string; 
+    query: string; 
+    focusFiles?: string[];
+    options?: {
+      maxFiles?: number;
+      includeConfig?: boolean;
+      includeImports?: boolean;
+      includeReverseDeps?: boolean;
+    }
+  }) {
+    return this.contextCollector.gatherStrategicContext(
+      dto.projectId, 
+      dto.query, 
+      dto.focusFiles || [],
+      dto.options
+    );
+  }
+
   @Get('info')
   @ApiOperation({ summary: 'Get current AI provider info' })
   getProviderInfo() {

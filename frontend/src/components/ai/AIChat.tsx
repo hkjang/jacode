@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2, FilePlus, FileMinus } from 'lucide-react';
+import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2, FilePlus, FileMinus, Copy, Download, RefreshCw, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { aiApi, api } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
@@ -137,6 +137,7 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
   
   // Multi-file context state
   const [contextFiles, setContextFiles] = useState<FileContext[]>([]);
+  const [expandedContextFile, setExpandedContextFile] = useState<string | null>(null);
 
   // Circuit Breaker State
   const [circuitStatus, setCircuitStatus] = useState<'CLOSED' | 'OPEN' | 'HALF_OPEN'>('CLOSED');
@@ -144,6 +145,14 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
   // Streaming Control
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Smart Mode: Auto-gather strategic context on every send
+  const [smartMode, setSmartMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ai-smart-mode') !== 'false'; // Default: ON
+    }
+    return true;
+  });
 
   // Persist model selection when it changes
   const handleModelChange = (model: string) => {
@@ -337,9 +346,45 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
     await chatApi.addMessage(sessionId, 'user', input);
 
     try {
-      // Build context from multiple files
-      const context = contextFiles.length > 0
-        ? contextFiles.map(f => `File${f.source === 'auto' ? ' (Auto)' : ''}: ${f.path}\n\`\`\`${f.language || ''}\n${f.content}\n\`\`\``).join('\n\n')
+      // Smart Mode: Auto-gather strategic context
+      let strategicFiles = [...contextFiles];
+      if (smartMode && projectId) {
+        try {
+          const focusPaths = contextFiles.map(f => f.path);
+          const { data } = await api.post('/api/ai/context/strategic', {
+            projectId,
+            query: input,
+            focusFiles: focusPaths,
+            options: { maxFiles: 8, includeConfig: true, includeImports: true }
+          });
+          
+          // Merge strategic files with existing context (dedup by path)
+          const existingPaths = new Set(contextFiles.map(f => f.path));
+          for (const file of (data.files || [])) {
+            if (!existingPaths.has(file.path)) {
+              strategicFiles.push({
+                id: file.path,
+                path: file.path,
+                content: file.content,
+                language: file.path.split('.').pop(),
+                source: 'auto'
+              });
+            }
+          }
+          
+          // Update UI state with new files
+          if (strategicFiles.length > contextFiles.length) {
+            setContextFiles(strategicFiles);
+          }
+        } catch (e) {
+          console.warn('Strategic context gathering failed:', e);
+          // Continue with existing context
+        }
+      }
+
+      // Build context from all files (including strategic ones)
+      const context = strategicFiles.length > 0
+        ? strategicFiles.map(f => `File${f.source === 'auto' ? ' (Auto)' : ''}: ${f.path}\n\`\`\`${f.language || ''}\n${f.content}\n\`\`\``).join('\n\n')
         : '';
 
       const requestBody = {
@@ -618,7 +663,48 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
           </div>
         </div>
         <div className="flex items-center gap-1">
-
+          {/* Smart Mode Toggle */}
+          <Button
+            variant={smartMode ? "default" : "ghost"}
+            size="sm"
+            className={cn(
+              "h-6 text-[10px] px-2 flex items-center gap-1 transition-all",
+              smartMode && "bg-purple-500 hover:bg-purple-600 text-white"
+            )}
+            onClick={() => {
+              const newValue = !smartMode;
+              setSmartMode(newValue);
+              localStorage.setItem('ai-smart-mode', String(newValue));
+            }}
+            title={smartMode ? "Smart Mode: Auto-gather context ON" : "Smart Mode: OFF"}
+          >
+            <Wand2 className="h-3 w-3" />
+            {smartMode ? 'Smart' : 'Manual'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => {
+              // Export chat as Markdown
+              const markdown = messages.map(m => 
+                m.role === 'user' 
+                  ? `**User:**\n${m.content}` 
+                  : `**AI:**\n${m.content}`
+              ).join('\n\n---\n\n');
+              const blob = new Blob([markdown], { type: 'text/markdown' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `chat-${new Date().toISOString().slice(0,10)}.md`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            title="Export chat as Markdown"
+            disabled={messages.length === 0}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -681,46 +767,103 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
         </div>
       )}
       
-      {/* Context Files Panel */}
+      {/* Context Files Panel - Enhanced */}
       {!showHistory && (
-        <div className="border-b p-2 bg-muted/20">
-            <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-muted-foreground">Context Files ({contextFiles.length})</span>
-                {initialFile && !contextFiles.some(f => f.path === initialFile.path) && (
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-5 text-[10px] px-2 flex items-center gap-1"
-                        onClick={() => addFileToContext(initialFile)}
-                    >
-                        <Plus className="h-3 w-3" /> Add Current File
-                    </Button>
-                )}
+        <div className="border-b bg-muted/20">
+            <div className="flex items-center justify-between p-2 pb-1">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                    <FileCode className="h-3 w-3" />
+                    Context ({contextFiles.length})
+                    {contextFiles.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground/70">
+                        · {contextFiles.reduce((acc, f) => acc + (f.content?.split('\n').length || 0), 0)} lines
+                      </span>
+                    )}
+                </span>
+                <div className="flex items-center gap-1">
+                    {initialFile && !contextFiles.some(f => f.path === initialFile.path) && (
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-5 text-[10px] px-2 flex items-center gap-1"
+                            onClick={() => addFileToContext(initialFile)}
+                        >
+                            <Plus className="h-3 w-3" /> Add Current
+                        </Button>
+                    )}
+                    {contextFiles.length > 0 && (
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-5 text-[10px] px-2 text-destructive hover:text-destructive"
+                            onClick={() => setContextFiles([])}
+                            title="Clear all context"
+                        >
+                            <Trash2 className="h-3 w-3" />
+                        </Button>
+                    )}
+                </div>
             </div>
             {contextFiles.length > 0 ? (
-                <div className="space-y-1 max-h-24 overflow-y-auto">
-                    {contextFiles.map((file) => (
-                        <div key={file.path} className="flex items-center justify-between bg-background rounded px-2 py-1 border text-xs">
-                           <div className="flex items-center gap-1 overflow-hidden">
-                               {file.source === 'auto' && <Sparkles className="h-3 w-3 text-purple-500 flex-shrink-0" />}
-                               <div className="truncate max-w-[180px]" title={file.path}>
-                                    {file.path.split('/').pop()}
-                               </div>
-                           </div>
-                           <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-4 w-4 p-0 opacity-70 hover:opacity-100"
-                                onClick={() => removeFileFromContext(file.path)}
-                           >
-                                <X className="h-3 w-3" />
-                           </Button>
-                        </div>
-                    ))}
+                <div className="px-2 pb-2 space-y-1">
+                    {contextFiles.map((file) => {
+                        const lineCount = file.content?.split('\n').length || 0;
+                        const ext = file.path.split('.').pop()?.toLowerCase() || '';
+                        const isExpanded = expandedContextFile === file.path;
+                        
+                        return (
+                            <div key={file.path} className="bg-background rounded border text-xs overflow-hidden">
+                                <div 
+                                    className="flex items-center justify-between px-2 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors"
+                                    onClick={() => setExpandedContextFile(isExpanded ? null : file.path)}
+                                >
+                                    <div className="flex items-center gap-1.5 overflow-hidden">
+                                        {file.source === 'auto' && <Sparkles className="h-3 w-3 text-purple-500 flex-shrink-0" />}
+                                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                            ['ts', 'tsx', 'js', 'jsx'].includes(ext) ? 'bg-blue-500' :
+                                            ['py'].includes(ext) ? 'bg-yellow-500' :
+                                            ['css', 'scss'].includes(ext) ? 'bg-pink-500' :
+                                            ['json', 'yaml', 'yml'].includes(ext) ? 'bg-green-500' :
+                                            ['md', 'txt'].includes(ext) ? 'bg-gray-400' :
+                                            'bg-gray-300'
+                                        }`} />
+                                        <span className="truncate max-w-[140px] font-medium" title={file.path}>
+                                            {file.path.split('/').pop()}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                                            {lineCount} lines
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Code className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-4 w-4 p-0 opacity-70 hover:opacity-100"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeFileFromContext(file.path);
+                                            }}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                {isExpanded && (
+                                    <div className="border-t bg-zinc-900 text-zinc-100 p-2 max-h-40 overflow-auto">
+                                        <pre className="text-[11px] font-mono whitespace-pre-wrap break-all">
+                                            {file.content?.slice(0, 2000)}{file.content && file.content.length > 2000 ? '\n... (truncated)' : ''}
+                                        </pre>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             ) : (
-                <div className="text-[10px] text-muted-foreground text-center py-1">
-                    No files in context. AI won't see any code unless added.
+                <div className="text-[10px] text-muted-foreground text-center py-2 px-2">
+                    <p>No files in context.</p>
+                    <p className="mt-1 opacity-70">Use ✨ to auto-detect relevant files or add manually.</p>
                 </div>
             )}
         </div>
@@ -762,19 +905,53 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
           </div>
         )}
 
-        {messages.map((message) => (
+        {messages.map((message, idx) => (
           <div
             key={message.id}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} group`}
           >
             <div
-              className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+              className={`max-w-[90%] rounded-lg px-3 py-2 text-sm relative ${
                 message.role === 'user'
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted'
               }`}
             >
               {message.role === 'assistant' ? renderMarkdown(message.content, message.id) : message.content}
+              
+              {/* Message Actions (hover) */}
+              <div className={`absolute -bottom-6 ${message.role === 'user' ? 'right-0' : 'left-0'} flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 rounded-full bg-background/80 hover:bg-background shadow-sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(message.content);
+                  }}
+                  title="Copy message"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+                {message.role === 'assistant' && idx === messages.length - 1 && !loading && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0 rounded-full bg-background/80 hover:bg-background shadow-sm"
+                    onClick={() => {
+                      // Regenerate: remove last assistant message and re-send
+                      const lastUserMsgIdx = messages.findLastIndex(m => m.role === 'user');
+                      if (lastUserMsgIdx >= 0) {
+                        const lastUserMsg = messages[lastUserMsgIdx];
+                        setMessages(messages.slice(0, lastUserMsgIdx + 1));
+                        setInput(lastUserMsg.content);
+                      }
+                    }}
+                    title="Regenerate response"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         ))}

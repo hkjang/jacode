@@ -49,16 +49,34 @@ export class CodeProcessor extends WorkerHost {
       await this.updateTaskStatus(taskId, 'EXECUTING', 10, 'Analyzing requirements...');
       this.agentGateway.notifyTaskProgress({ id: taskId, userId: job.data.userId || '', projectId: job.data.projectId || '', progress: 10, currentStep: 'Analyzing requirements...' });
 
-      // Enrich context with project structure
+      // Enrich context with STRATEGIC context (imports, reverse deps, config, similar files)
       let enrichedContext = context || '';
       if (job.data.projectId) {
         try {
-          const projectStructure = await this.contextCollector.getProjectStructure(job.data.projectId);
-          if (projectStructure) {
-            enrichedContext += `\n\nProject Context:\nTechnologies: ${projectStructure.technologies.join(', ')}\nStructure: ${projectStructure.directories.slice(0, 10).join(', ')}`;
+          const strategicContext = await this.contextCollector.gatherStrategicContext(
+            job.data.projectId,
+            prompt, // Use prompt as the query for semantic search
+            job.data.files || [], // Focus on target files if provided
+            { maxFiles: 10, includeConfig: true, includeImports: true, includeReverseDeps: true }
+          );
+          
+          // Add project info
+          if (strategicContext.projectInfo) {
+            enrichedContext += `\n\nProject: ${strategicContext.projectInfo.name}`;
+            enrichedContext += `\nTechnologies: ${strategicContext.projectInfo.technologies.join(', ')}`;
           }
+          
+          // Add strategic files as context
+          if (strategicContext.files.length > 0) {
+            enrichedContext += `\n\n--- RELATED FILES (${strategicContext.files.length} files, ${strategicContext.totalLines} lines) ---\n`;
+            for (const file of strategicContext.files) {
+              enrichedContext += `\n[${file.source.toUpperCase()}] ${file.path}:\n\`\`\`\n${file.content.slice(0, 2000)}\n\`\`\`\n`;
+            }
+          }
+          
+          this.logger.log(`Strategic context: ${strategicContext.files.length} files, ${strategicContext.totalLines} lines`);
         } catch (error) {
-          this.logger.warn(`Failed to get project structure: ${error.message}`);
+          this.logger.warn(`Failed to get strategic context: ${error.message}`);
         }
       }
 

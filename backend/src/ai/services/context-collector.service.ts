@@ -337,4 +337,255 @@ export class ContextCollectorService {
 
     return rankedFiles;
   }
+
+  /**
+   * Get key configuration files for the project
+   */
+  public async getConfigurationFiles(projectId: string): Promise<{ path: string; content: string }[]> {
+    const configPatterns = [
+      'package.json', 'tsconfig.json', 'next.config.js', 'next.config.mjs',
+      'vite.config.ts', 'webpack.config.js', 'tailwind.config.js', 'tailwind.config.ts',
+      '.env.example', 'prisma/schema.prisma', 'requirements.txt', 'setup.py',
+      'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle'
+    ];
+
+    const files = await this.prisma.file.findMany({
+      where: {
+        projectId,
+        isDirectory: false,
+        OR: configPatterns.map(p => ({ path: { endsWith: p } }))
+      },
+      select: { path: true, content: true },
+      take: 10
+    });
+
+    return files.map(f => ({ path: f.path, content: f.content || '' }));
+  }
+
+  /**
+   * Find files that import the given file (reverse dependencies)
+   */
+  public async findReverseDependencies(
+    projectId: string,
+    filePath: string,
+    limit: number = 5
+  ): Promise<{ path: string; content: string }[]> {
+    const fileName = filePath.split('/').pop()?.replace(/\.\w+$/, '') || '';
+    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+    
+    // Search for files that might import this file
+    const searchPatterns = [
+      fileName,                                    // Direct name match
+      `./${fileName}`,                            // Relative import
+      `from '${fileName}'`,                       // ES6 import
+      `from "./${fileName}"`,                     // ES6 import with double quotes
+      `require('${fileName}')`,                   // CommonJS
+    ];
+
+    const files = await this.prisma.file.findMany({
+      where: {
+        projectId,
+        isDirectory: false,
+        path: { not: filePath },
+        OR: searchPatterns.map(p => ({ content: { contains: p } }))
+      },
+      select: { path: true, content: true },
+      take: limit * 2
+    });
+
+    // Filter to only those that actually import this specific file
+    const importers = files.filter(f => {
+      const content = f.content || '';
+      return content.includes(fileName) && (
+        content.includes(`from '`) || 
+        content.includes(`from "`) || 
+        content.includes(`require(`)
+      );
+    }).slice(0, limit);
+
+    return importers.map(f => ({ path: f.path, content: f.content || '' }));
+  }
+
+  /**
+   * Find similar files by naming convention
+   */
+  private async findSimilarFiles(
+    projectId: string,
+    filePath: string,
+    limit: number = 3
+  ): Promise<{ path: string; content: string }[]> {
+    const fileName = filePath.split('/').pop() || '';
+    const baseName = fileName.replace(/\.\w+$/, '').replace(/\.(test|spec|stories|styles)$/, '');
+    
+    // Look for related files: .test.ts, .spec.ts, .stories.tsx, .styles.ts, etc.
+    const files = await this.prisma.file.findMany({
+      where: {
+        projectId,
+        isDirectory: false,
+        path: { not: filePath },
+        name: { contains: baseName }
+      },
+      select: { path: true, content: true },
+      take: limit
+    });
+
+    return files.map(f => ({ path: f.path, content: f.content || '' }));
+  }
+
+  /**
+   * MASTER METHOD: Gather strategic context for AI operations
+   * Combines semantic search, import chains, config files, and reverse deps
+   */
+  public async gatherStrategicContext(
+    projectId: string,
+    query: string,
+    focusFilePaths: string[] = [],
+    options: {
+      maxFiles?: number;
+      maxTokensPerFile?: number;
+      includeConfig?: boolean;
+      includeImports?: boolean;
+      includeReverseDeps?: boolean;
+      includeSimilar?: boolean;
+    } = {}
+  ): Promise<{
+    files: { path: string; content: string; source: 'focus' | 'import' | 'reverse' | 'search' | 'config' | 'similar'; score?: number }[];
+    projectInfo: { name: string; technologies: string[] } | null;
+    totalLines: number;
+  }> {
+    const {
+      maxFiles = 10,
+      maxTokensPerFile = 3000,
+      includeConfig = true,
+      includeImports = true,
+      includeReverseDeps = true,
+      includeSimilar = true,
+    } = options;
+
+    const collectedFiles: Map<string, { path: string; content: string; source: string; score?: number }> = new Map();
+    const maxChars = maxTokensPerFile * 4; // Rough token estimate
+
+    // 1. Focus files (highest priority)
+    for (const focusPath of focusFilePaths) {
+      const file = await this.prisma.file.findFirst({
+        where: { projectId, path: focusPath, isDirectory: false }
+      });
+      if (file && file.content) {
+        collectedFiles.set(file.path, {
+          path: file.path,
+          content: file.content.slice(0, maxChars),
+          source: 'focus',
+          score: 100
+        });
+      }
+    }
+
+    // 2. Semantic search based on query
+    if (query) {
+      const searchResults = await this.searchRelevantFiles(projectId, query, 5);
+      for (const file of searchResults) {
+        if (!collectedFiles.has(file.path)) {
+          collectedFiles.set(file.path, {
+            path: file.path,
+            content: file.content.slice(0, maxChars),
+            source: 'search',
+            score: file.score
+          });
+        }
+      }
+    }
+
+    // 3. Import chain analysis for focus files
+    if (includeImports) {
+      for (const focusPath of focusFilePaths) {
+        try {
+          const context = await this.collectContext(projectId, focusPath, { 
+            includeRelatedFiles: true, 
+            maxRelatedFiles: 3,
+            includeProjectStructure: false 
+          });
+          for (const related of context.relatedFiles) {
+            if (!collectedFiles.has(related.path)) {
+              collectedFiles.set(related.path, {
+                path: related.path,
+                content: related.content.slice(0, maxChars),
+                source: 'import',
+                score: 50
+              });
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`Failed to get imports for ${focusPath}: ${e}`);
+        }
+      }
+    }
+
+    // 4. Reverse dependencies
+    if (includeReverseDeps) {
+      for (const focusPath of focusFilePaths.slice(0, 2)) { // Limit to first 2 focus files
+        const reverseDeps = await this.findReverseDependencies(projectId, focusPath, 2);
+        for (const file of reverseDeps) {
+          if (!collectedFiles.has(file.path)) {
+            collectedFiles.set(file.path, {
+              path: file.path,
+              content: file.content.slice(0, maxChars),
+              source: 'reverse',
+              score: 40
+            });
+          }
+        }
+      }
+    }
+
+    // 5. Similar files (test, spec, stories)
+    if (includeSimilar) {
+      for (const focusPath of focusFilePaths.slice(0, 1)) {
+        const similar = await this.findSimilarFiles(projectId, focusPath, 2);
+        for (const file of similar) {
+          if (!collectedFiles.has(file.path)) {
+            collectedFiles.set(file.path, {
+              path: file.path,
+              content: file.content.slice(0, maxChars),
+              source: 'similar',
+              score: 30
+            });
+          }
+        }
+      }
+    }
+
+    // 6. Configuration files
+    if (includeConfig) {
+      const configs = await this.getConfigurationFiles(projectId);
+      for (const file of configs.slice(0, 3)) { // Limit config files
+        if (!collectedFiles.has(file.path)) {
+          collectedFiles.set(file.path, {
+            path: file.path,
+            content: file.content.slice(0, maxChars / 2), // Less for config
+            source: 'config',
+            score: 20
+          });
+        }
+      }
+    }
+
+    // Sort by score and limit
+    const sortedFiles = Array.from(collectedFiles.values())
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, maxFiles) as any[];
+
+    // Get project info
+    const projectInfo = await this.getProjectStructure(projectId);
+
+    // Calculate total lines
+    const totalLines = sortedFiles.reduce((acc, f) => acc + (f.content?.split('\n').length || 0), 0);
+
+    this.logger.log(`Gathered strategic context: ${sortedFiles.length} files, ${totalLines} lines`);
+
+    return {
+      files: sortedFiles,
+      projectInfo: projectInfo ? { name: projectInfo.name, technologies: projectInfo.technologies } : null,
+      totalLines
+    };
+  }
 }
