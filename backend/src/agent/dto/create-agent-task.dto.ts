@@ -39,4 +39,14 @@ export class CreateAgentTaskDto {
   @IsOptional()
   @IsString()
   groupId?: string;
+
+  @ApiProperty({ required: false, description: 'AI Model' })
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @ApiProperty({ required: false, description: 'AI Provider' })
+  @IsOptional()
+  @IsString()
+  provider?: string;
 }

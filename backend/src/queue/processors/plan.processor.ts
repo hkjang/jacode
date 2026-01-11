@@ -58,7 +58,10 @@ export class PlanProcessor extends WorkerHost {
         }
       }
 
-      const plan = await this.aiService.createPlan(requirements, enrichedContext);
+      const plan = await this.aiService.createPlan(requirements, enrichedContext, {
+        model: job.data.model,
+        provider: job.data.provider,
+      });
 
       await job.updateProgress(80);
       await job.updateProgress(80);

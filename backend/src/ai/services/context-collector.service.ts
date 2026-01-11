@@ -278,4 +278,63 @@ export class ContextCollectorService {
 
     return languageMap[extension] || 'plaintext';
   }
+
+  /**
+   * Search for relevant files based on a query
+   */
+  public async searchRelevantFiles(
+    projectId: string,
+    query: string,
+    limit: number = 5
+  ): Promise<{ path: string; content: string; score: number }[]> {
+    if (!query || !query.trim()) {
+      return [];
+    }
+
+    const keywords = query.trim().split(/\s+/).filter(k => k.length > 2);
+    if (keywords.length === 0) return [];
+
+    // Simple keyword search in path and content
+    // We prioritize path matches
+    const files = await this.prisma.file.findMany({
+      where: {
+        projectId,
+        isDirectory: false,
+        OR: [
+          ...keywords.map(k => ({ path: { contains: k, mode: 'insensitive' as const } })),
+          ...keywords.map(k => ({ content: { contains: k, mode: 'insensitive' as const } })),
+        ],
+      },
+      select: {
+        path: true,
+        content: true,
+      },
+      take: 50, // Fetch more to rank
+    });
+
+    // Ranking Logic
+    const rankedFiles = files.map(file => {
+      let score = 0;
+      const lowerPath = file.path.toLowerCase();
+      const lowerContent = (file.content || '').toLowerCase();
+
+      for (const keyword of keywords) {
+        const lowerK = keyword.toLowerCase();
+        // Path match is strong signal
+        if (lowerPath.includes(lowerK)) score += 10;
+        // Exact filename match is very strong
+        if (lowerPath.endsWith(`/${lowerK}`) || lowerPath.endsWith(`\\${lowerK}`)) score += 20;
+        
+        // Content match
+        const contentMatches = (lowerContent.match(new RegExp(lowerK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        score += Math.min(contentMatches, 5); // Cap content bonus
+      }
+
+      return { ...file, score, content: file.content || '' };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+    return rankedFiles;
+  }
 }

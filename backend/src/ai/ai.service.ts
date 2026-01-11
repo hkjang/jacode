@@ -275,6 +275,8 @@ export class AIService {
       stylePresetId?: string;
       useChain?: boolean; // Default true
       seed?: number; // For reproducible results
+      model?: string;
+      provider?: string;
     }
   ): Promise<{ 
     code: string; 
@@ -303,6 +305,8 @@ export class AIService {
           filePath: options.filePath,
           language: language || 'typescript',
           stylePresetId: options.stylePresetId,
+          model: options.model,
+          provider: options.provider,
         });
 
         return {
@@ -331,6 +335,10 @@ Respond with the code only, wrapped in a code block. Add brief comments explaini
     if (options?.seed !== undefined) {
       chatOptions.seed = options.seed;
       this.logger.log(`Using seed ${options.seed} for reproducible generation`);
+    }
+
+    if (options?.model) {
+      chatOptions.model = options.model;
     }
 
     const response = await this.chat([
@@ -431,7 +439,7 @@ Respond with the test code wrapped in a code block.`;
   /**
    * Create implementation plan from requirements
    */
-  async createPlan(requirements: string, context?: string): Promise<string> {
+  async createPlan(requirements: string, context?: string, options?: { model?: string; provider?: string }): Promise<string> {
     const systemPrompt = `You are a senior software architect. Create a detailed implementation plan for the given requirements.
 
 The plan should include:
@@ -450,7 +458,9 @@ Format the response in Markdown.`;
         role: 'user',
         content: `Requirements:\n${requirements}${context ? `\n\nProject Context:\n${context}` : ''}`,
       },
-    ]);
+    ], {
+      model: options?.model,
+    });
 
     return response.content;
   }
@@ -460,6 +470,24 @@ Format the response in Markdown.`;
    */
   async listModels(): Promise<{ models: string[]; default: string }> {
     return this.getProvider().listModels();
+  }
+
+  /**
+   * Get list of active configured models for user selection
+   */
+  async getActiveModels() {
+    const models = await this.prisma.aIModelSetting.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        provider: true,
+        isDefault: true,
+      },
+      orderBy: { isDefault: 'desc' },
+    });
+    return models;
   }
 
   /**

@@ -175,6 +175,9 @@ model AgentTask {
   progress    Int      @default(0)
   currentStep String?
   groupId     String?
+
+  model       String?  // Selected AI Model
+  provider    String?  // Selected AI Provider
   
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

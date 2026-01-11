@@ -142,7 +142,7 @@ export const fileApi = {
 
 // Agent API
 export const agentApi = {
-  createTask: async (payload: { type: string; prompt: string; projectId: string; context?: object; priority?: number }) => {
+  createTask: async (payload: { type: string; prompt: string; projectId: string; context?: object; priority?: number; model?: string; provider?: string }) => {
     const { data } = await api.post('/api/agents/tasks', payload);
     return data;
   },
@@ -221,6 +221,11 @@ export const aiApi = {
 
   listModels: async () => {
     const { data } = await api.get('/api/ai/models');
+    return data;
+  },
+
+  listActiveModels: async () => {
+    const { data } = await api.get('/api/ai/active-models');
     return data;
   },
 

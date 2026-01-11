@@ -325,7 +325,7 @@ export default function EditorPage() {
               <Panel defaultSize={30} minSize={20} maxSize={50}>
                 <AIChat
                   projectId={projectId}
-                  currentFile={activeFile}
+                  initialFile={activeFile}
                   onClose={() => toggleAI(false)}
                   onApplyCode={(code, mode) => {
                     if (activeFile) {

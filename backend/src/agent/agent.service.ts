@@ -30,8 +30,11 @@ export class AgentService {
         priority: dto.priority || 1,
         groupId: dto.groupId,
         projectId: dto.projectId,
+
         userId,
         status: AgentStatus.PENDING,
+        model: dto.model,
+        provider: dto.provider,
       },
     });
 
@@ -273,6 +276,8 @@ export class AgentService {
       userId: task.userId,
       prompt: task.prompt,
       context: task.context,
+      model: task.model,
+      provider: task.provider,
     };
 
     switch (task.type) {

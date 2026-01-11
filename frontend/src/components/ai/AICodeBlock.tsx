@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Check, Copy, Play, Eye, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MonacoDiffEditor } from '@/components/editor/MonacoDiffEditor';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface AICodeBlockProps {
   code: string;
@@ -92,9 +94,22 @@ export function AICodeBlock({
       <ActionButtons className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-background/50 backdrop-blur-sm rounded p-0.5" />
 
       {/* Code Block */}
-      <pre className="bg-zinc-900 text-zinc-100 p-3 pt-8 rounded-lg overflow-x-auto text-sm font-mono mb-1">
-        <code>{code}</code>
-      </pre>
+      <div className="rounded-lg overflow-hidden border border-border/50 mb-1">
+        <SyntaxHighlighter
+          language={language || 'typescript'}
+          style={vscDarkPlus}
+          customStyle={{
+            margin: 0,
+            padding: '1.5rem 1rem 1rem 1rem',
+            background: '#18181b', // zinc-900
+            fontSize: '0.875rem',
+            fontFamily: 'monospace'
+          }}
+          showLineNumbers={true}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
 
       {/* Bottom Action Buttons (Footer) */}
       <div className="flex justify-end border-t border-border/50 pt-1">

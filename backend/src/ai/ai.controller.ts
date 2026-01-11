@@ -19,23 +19,42 @@ import { ChatDto } from './dto/chat.dto';
 import { GenerateCodeDto } from './dto/generate-code.dto';
 import { ReviewCodeDto } from './dto/review-code.dto';
 
+import { ContextCollectorService } from './services/context-collector.service';
+
 @ApiTags('ai')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('api/ai')
 export class AIController {
-  constructor(private readonly aiService: AIService) {}
+  constructor(
+    private readonly aiService: AIService,
+    private readonly contextCollector: ContextCollectorService,
+  ) {}
+
+  @Post('context/search')
+  @ApiOperation({ summary: 'Search for relevant context files' })
+  async searchContext(@Body() dto: { projectId: string; query: string }) {
+    return this.contextCollector.searchRelevantFiles(dto.projectId, dto.query);
+  }
 
   @Get('info')
   @ApiOperation({ summary: 'Get current AI provider info' })
   getProviderInfo() {
     return this.aiService.getProviderInfo();
   }
+// ... existing methods ...
+
 
   @Get('models')
   @ApiOperation({ summary: 'List available AI models' })
   async listModels() {
     return this.aiService.listModels();
+  }
+
+  @Get('active-models')
+  @ApiOperation({ summary: 'List active configured AI models' })
+  async listActiveModels() {
+    return this.aiService.getActiveModels();
   }
 
   @Post('chat')

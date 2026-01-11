@@ -16,39 +16,81 @@ import {
   Zap,
   Terminal,
   Database,
-  Info
+  Info,
+  FileCode,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { adminChatApi } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
+import { AICodeBlock } from '@/components/ai/AICodeBlock';
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  modelName?: string;
-  modelProvider?: string;
-  promptTokens: number;
-  completionTokens: number;
-  responseTimeMs: number;
-  codeApplied: boolean;
-  appliedFilePath?: string;
-  createdAt: string;
-}
+// Process User Content to extract Context Files
+const processUserContent = (content: string) => {
+  const contextMarker = "Context Files:\n";
+  const index = content.indexOf(contextMarker);
+  
+  if (index === -1) return { text: content, contextFiles: [] };
+  
+  const text = content.substring(0, index).trim();
+  const contextSection = content.substring(index + contextMarker.length);
+  
+  // Simple parsing of context files based on "---" separator usage in AIChat.tsx
+  // Pattern: "File: <path>\n```\n<content>\n```" or "File (Auto): <path>..."
+  const files: { path: string; content: string; source: 'manual' | 'auto' }[] = [];
+  const parts = contextSection.split('\n---\n').filter(p => p.trim());
+  
+  for (const part of parts) {
+    const lines = part.trim().split('\n');
+    const pathLine = lines.find(l => l.startsWith('File'));
+    if (pathLine) {
+       const isAuto = pathLine.includes('(Auto)');
+       const path = pathLine.replace(/File(\s\(Auto\))?:\s/, '').trim();
+       files.push({ 
+         path, 
+         content: 'Content hidden for brevity',
+         source: isAuto ? 'auto' : 'manual'
+       }); 
+    }
+  }
+  
+  return { text, contextFiles: files };
+};
 
-interface ChatSessionDetail {
-  id: string;
-  title: string;
-  user: { name: string; email: string };
-  project?: { name: string };
-  messages: ChatMessage[];
-  createdAt: string;
-  updatedAt: string;
-}
+// Process Assistant Content to extract XML Files
+const processAssistantContent = (content: string) => {
+  const fileRegex = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
+  const files: { path: string; content: string }[] = [];
+  let match;
+  let cleanText = content;
+
+  // Extract files
+  while ((match = fileRegex.exec(content)) !== null) {
+    files.push({
+      path: match[1],
+      content: match[2].trim(),
+    });
+  }
+
+  // Remove XML tags from text for display, but keep the explanation
+  if (files.length > 0) {
+    cleanText = content.replace(fileRegex, '').trim();
+  }
+
+  return { text: cleanText, generatedFiles: files };
+};
 
 export default function ChatDetailPage() {
   const params = useParams();
@@ -58,6 +100,7 @@ export default function ChatDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
 
+  // ... (useEffect and loadSession same as before)
   useEffect(() => {
     if (params.id) {
       loadSession(params.id as string);
@@ -94,17 +137,30 @@ export default function ChatDetailPage() {
     return (
       <ReactMarkdown
         className="prose prose-sm dark:prose-invert max-w-none break-words"
+        remarkPlugins={[remarkGfm]}
         components={{
+          table: ({ children }) => <div className="overflow-x-auto my-4"><table className="min-w-full divide-y divide-border border">{children}</table></div>,
+          thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+          th: ({ children }) => <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-r last:border-r-0">{children}</th>,
+          td: ({ children }) => <td className="px-3 py-2 whitespace-nowrap text-sm border-r last:border-r-0 border-t">{children}</td>,
           code: ({ node, className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || '');
-            return !className ? (
-              <code className="bg-muted px-1 rounded font-mono text-xs" {...props}>
-                {children}
-              </code>
-            ) : (
-              <div className="bg-muted p-2 rounded-md my-2 overflow-x-auto text-xs font-mono border">
-                {String(children).replace(/\n$/, '')}
-              </div>
+            const language = match ? match[1] : '';
+            const codeContent = String(children).replace(/\n$/, '');
+
+            if (!className) {
+              return (
+                <code className="bg-muted px-1 rounded font-mono text-xs" {...props}>
+                  {children}
+                </code>
+              );
+            }
+            
+            return (
+              <AICodeBlock 
+                code={codeContent} 
+                language={language} 
+              />
             );
           },
         }}
@@ -263,7 +319,13 @@ export default function ChatDetailPage() {
           {session.messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-10 bg-muted/20 rounded-lg">메시지가 없습니다.</div>
           ) : (
-            session.messages.map((msg, index) => (
+            session.messages.map((msg, index) => {
+              // Pre-process content for visualization
+              const isUser = msg.role === 'user';
+              const userContent = isUser ? processUserContent(msg.content) : null;
+              const aiContent = !isUser ? processAssistantContent(msg.content) : null;
+              
+              return (
               <div key={msg.id} className={cn(
                 "flex flex-col border rounded-lg overflow-hidden transition-all hover:shadow-md",
                 msg.role === 'system' ? "bg-muted/50 border-dashed" : "bg-card"
@@ -310,8 +372,80 @@ export default function ChatDetailPage() {
                     </pre>
                   ) : (
                     <>
-                      {msg.role === 'assistant' ? renderMarkdown(msg.content) : (
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                      {msg.role === 'user' && userContent ? (
+                        <div className="space-y-2">
+                          <div className="whitespace-pre-wrap">{userContent.text}</div>
+                          {userContent.contextFiles.length > 0 && (
+                            <Accordion type="single" collapsible className="w-full border rounded-md bg-muted/20">
+                              <AccordionItem value="context-files" className="border-none">
+                                <AccordionTrigger className="px-4 py-2 text-xs hover:no-underline">
+                                  <div className="flex items-center gap-2 text-muted-foreground">
+                                    <Layers className="h-3 w-3" />
+                                    <span>Used Context ({userContent.contextFiles.length} files)</span>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pb-2 pt-0">
+                                  <div className="space-y-1 mt-1">
+                                    {userContent.contextFiles.map((f, i) => (
+                                      <div key={i} className="flex items-center gap-2 text-xs bg-background border px-2 py-1 rounded">
+                                        {f.source === 'auto' ? (
+                                           <Sparkles className="h-3 w-3 text-purple-500" />
+                                        ) : (
+                                           <FileCode className="h-3 w-3 text-blue-500" />
+                                        )}
+                                        <span className="font-mono">{f.path}</span>
+                                        {f.source === 'auto' && <span className="text-[10px] text-muted-foreground ml-1">(Auto)</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          )}
+                        </div>
+                      ) : msg.role === 'assistant' && aiContent ? (
+                        <div className="space-y-4">
+                           {renderMarkdown(aiContent.text)}
+                           
+                           {/* Generated Files Preview */}
+                           {aiContent.generatedFiles.length > 0 && (
+                             <div className="space-y-2">
+                               <div className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                                 <FileCode className="h-3 w-3" /> Generated Artifacts
+                               </div>
+                               <Tabs defaultValue={aiContent.generatedFiles[0].path} className="w-full border rounded-md">
+                                 <div className="flex items-center bg-muted/50 border-b overflow-x-auto px-2">
+                                    <TabsList className="bg-transparent h-auto p-0 gap-1">
+                                      {aiContent.generatedFiles.map((file) => (
+                                        <TabsTrigger 
+                                          key={file.path} 
+                                          value={file.path}
+                                          className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm border-b-2 border-transparent data-[state=active]:border-primary rounded-none h-9 px-3"
+                                        >
+                                          {file.path.split('/').pop()}
+                                        </TabsTrigger>
+                                      ))}
+                                    </TabsList>
+                                 </div>
+                                 {aiContent.generatedFiles.map((file) => (
+                                   <TabsContent key={file.path} value={file.path} className="m-0">
+                                     <div className="relative">
+                                       <div className="absolute top-0 right-0 px-2 py-1 text-[10px] text-muted-foreground bg-muted border-b border-l rounded-bl z-10">
+                                         {file.path}
+                                       </div>
+                                       <AICodeBlock 
+                                         code={file.content} 
+                                         language={file.path.split('.').pop()} 
+                                       />
+                                     </div>
+                                   </TabsContent>
+                                 ))}
+                               </Tabs>
+                             </div>
+                           )}
+                        </div>
+                      ) : (
+                         <div className="whitespace-pre-wrap">{msg.content}</div>
                       )}
                     </>
                   )}
@@ -343,7 +477,8 @@ export default function ChatDetailPage() {
                   </div>
                 )}
               </div>
-            ))
+            );
+          })
           )}
         </div>
       </div>

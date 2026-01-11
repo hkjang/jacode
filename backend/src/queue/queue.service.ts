@@ -11,6 +11,8 @@ export interface CodeGenerationJob {
   context?: string;
   language?: string;
   files?: string[];
+  model?: string;
+  provider?: string;
 }
 
 export interface PlanGenerationJob {
@@ -19,6 +21,8 @@ export interface PlanGenerationJob {
   userId?: string;
   requirements: string;
   context?: string;
+  model?: string;
+  provider?: string;
 }
 
 @Injectable()

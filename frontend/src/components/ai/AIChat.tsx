@@ -1,11 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2, FilePlus, FileMinus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { aiApi, api } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AICodeBlock, DiffPreviewModal } from './AICodeBlock';
+import { ModelSelector } from './ModelSelector';
+import { ContextSuggestionPanel, SuggestedFile } from './ContextSuggestionPanel';
 
 interface Message {
   id: string;
@@ -22,14 +26,17 @@ interface ChatSession {
   messageCount?: number;
 }
 
+interface FileContext {
+  id: string;
+  path: string;
+  content: string;
+  language?: string;
+  source?: 'manual' | 'auto';
+}
+
 interface AIChatProps {
   projectId: string;
-  currentFile?: {
-    id: string;
-    path: string;
-    content: string;
-    language?: string;
-  } | null;
+  initialFile?: FileContext | null;
   onClose: () => void;
   onApplyCode?: (code: string, mode: 'replace' | 'append' | 'insert') => void;
 }
@@ -103,7 +110,7 @@ const chatApi = {
   },
 };
 
-export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatProps) {
+export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -113,10 +120,32 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   const [showHistory, setShowHistory] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  
+  // Initialize with persisted model if available
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('selected-ai-model') || '';
+    }
+    return '';
+  });
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Suggestion State
+  const [suggestions, setSuggestions] = useState<SuggestedFile[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // Multi-file context state
+  const [contextFiles, setContextFiles] = useState<FileContext[]>([]);
 
   // Circuit Breaker State
   const [circuitStatus, setCircuitStatus] = useState<'CLOSED' | 'OPEN' | 'HALF_OPEN'>('CLOSED');
+
+  // Persist model selection when it changes
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    localStorage.setItem('selected-ai-model', model);
+  };
 
   // Load active session from localStorage on mount
   useEffect(() => {
@@ -135,6 +164,17 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Update context files when initialFile changes (optional, or manual add)
+  // Here we just ensure if there's no context, maybe add the initial one?
+  // Or better, let user control it explicitly.
+  // But for convenience, if list is empty and we open chat with file, add it?
+  // Let's rely on explicit actions in UI mostly, but maybe init with one if provided and list empty.
+  useEffect(() => {
+    if (initialFile && contextFiles.length === 0) {
+      setContextFiles([initialFile]);
+    }
+  }, [initialFile]);
 
   const checkCircuitStatus = async () => {
     try {
@@ -198,6 +238,16 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     loadSessions();
   };
 
+  const addFileToContext = (file: FileContext) => {
+    if (!contextFiles.some(f => f.path === file.path)) {
+      setContextFiles([...contextFiles, file]);
+    }
+  };
+
+  const removeFileFromContext = (path: string) => {
+    setContextFiles(contextFiles.filter(f => f.path !== path));
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -236,17 +286,22 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     await chatApi.addMessage(sessionId, 'user', input);
 
     try {
-      const context = currentFile
-        ? `Current file: ${currentFile.path}\n\`\`\`${currentFile.language || ''}\n${currentFile.content}\n\`\`\``
+      // Build context from multiple files
+      const context = contextFiles.length > 0
+        ? contextFiles.map(f => `File${f.source === 'auto' ? ' (Auto)' : ''}: ${f.path}\n\`\`\`${f.language || ''}\n${f.content}\n\`\`\``).join('\n\n')
         : '';
 
       const response = await aiApi.chat(
         [
-          ...(context ? [{ role: 'system', content: `You are a helpful coding assistant. When providing code, always use markdown code blocks with the language specified. ${context}` }] : []),
+          ...(context ? [{ role: 'system', content: `You are a helpful coding assistant. When providing code, always use markdown code blocks with the language specified. \n\nContext Files:\n${context}` }] : []),
           ...messages.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user', content: input },
         ],
-        { temperature: 0.7 }
+
+        { 
+          temperature: 0.7,
+          model: selectedModel 
+        }
       );
 
       const endTime = Date.now();
@@ -301,14 +356,20 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   };
 
   const handleApplyCode = (code: string, messageId?: string) => {
-    if (currentFile) {
-      setPendingCode(code);
-      setPendingMessageId(messageId || null);
-      setShowDiff(true);
+    // If we have just one context file, or if the code block explicitly mentions a file (future), we apply.
+    // For now, if active (initialFile) is in context, we might assume applying to it, OR
+    // we just rely on parent to know what to do if we don't pass file path (it might apply to active editor file).
+    // The current implementation of handleApplyCode in EditorPage applies to activeFile.
+    // So we just pass the code.
+    
+    // Future improvement: Parse file path from AI response?
+    
+    if (initialFile) {
+        setPendingCode(code);
+        setPendingMessageId(messageId || null);
+        setShowDiff(true);
     } else {
-      onApplyCode?.(code, 'replace');
-      // If no file Context, we can't easily track file path for API, 
-      // but simplistic usage might not need it or we track 'New File'
+        onApplyCode?.(code, 'replace');
     }
   };
 
@@ -316,14 +377,8 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     onApplyCode?.(pendingCode, 'replace');
     
     // Track applied code
-    if (pendingMessageId && currentFile) {
-      // Find real message ID (from backend) if possible. 
-      // Note: frontend message IDs might be temp IDs if not refreshed.
-      // But loadSessions refreshes, so we should try to use valid IDs.
-      // Note: addMessage is async, but we don't await it to update state msg ID.
-      // However, AIChat logic reloads session often?
-      // For now, fire and forget.
-      chatApi.markCodeApplied(pendingMessageId, currentFile.path).catch(console.error);
+    if (pendingMessageId && initialFile) {
+      chatApi.markCodeApplied(pendingMessageId, initialFile.path).catch(console.error);
     }
 
     setShowDiff(false);
@@ -337,30 +392,35 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   };
 
   const handleGenerateCode = async () => {
-    if (!currentFile) return;
-    setInput(`이 파일을 개선해주세요: ${currentFile.path}\n\n개선할 부분:\n1. 코드 품질 향상\n2. 성능 최적화\n3. 가독성 개선`);
+    if (!initialFile) return;
+    setInput(`이 파일을 개선해주세요: ${initialFile.path}\n\n개선할 부분:\n1. 코드 품질 향상\n2. 성능 최적화\n3. 가독성 개선`);
   };
 
   const handleRefactorCode = async () => {
-    if (!currentFile) return;
-    setInput(`이 코드를 리팩토링해주세요. 더 깔끔하고 유지보수하기 쉬운 코드로 변환: ${currentFile.path}`);
+    if (!initialFile) return;
+    setInput(`이 코드를 리팩토링해주세요. 더 깔끔하고 유지보수하기 쉬운 코드로 변환: ${initialFile.path}`);
   };
 
   const handleFixBugs = async () => {
-    if (!currentFile) return;
-    setInput(`이 코드의 잠재적 버그와 문제점을 찾아서 수정해주세요: ${currentFile.path}`);
+    if (!initialFile) return;
+    setInput(`이 코드의 잠재적 버그와 문제점을 찾아서 수정해주세요: ${initialFile.path}`);
   };
 
   const handleExplainCode = async () => {
-    if (!currentFile) return;
-    setInput(`이 코드를 상세히 설명해주세요: ${currentFile.path}`);
+    if (!initialFile) return;
+    setInput(`이 코드를 상세히 설명해주세요: ${initialFile.path}`);
   };
 
   const renderMarkdown = (content: string, messageId?: string) => {
     return (
       <ReactMarkdown
         className="prose prose-sm dark:prose-invert max-w-none"
+        remarkPlugins={[remarkGfm]}
         components={{
+          table: ({ children }) => <div className="overflow-x-auto my-4"><table className="min-w-full divide-y divide-border border">{children}</table></div>,
+          thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+          th: ({ children }) => <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-r last:border-r-0">{children}</th>,
+          td: ({ children }) => <td className="px-3 py-2 whitespace-nowrap text-sm border-r last:border-r-0 border-t">{children}</td>,
           code: ({ node, className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
@@ -378,9 +438,9 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
               <AICodeBlock
                 code={codeContent}
                 language={language}
-                currentCode={currentFile?.content}
+                currentCode={initialFile?.content} // Compare with active file context
                 onApply={onApplyCode ? () => handleApplyCode(codeContent, messageId) : undefined}
-                onPreview={currentFile ? () => {
+                onPreview={initialFile ? () => {
                   setPendingCode(codeContent);
                   setPendingMessageId(messageId || null);
                   setShowDiff(true);
@@ -403,10 +463,10 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       <DiffPreviewModal
         isOpen={showDiff}
         onClose={() => setShowDiff(false)}
-        originalCode={currentFile?.content || ''}
+        originalCode={initialFile?.content || ''}
         newCode={pendingCode}
-        fileName={currentFile?.path}
-        language={currentFile?.language}
+        fileName={initialFile?.path}
+        language={initialFile?.language}
         onAccept={handleAcceptCode}
         onReject={handleRejectCode}
       />
@@ -430,6 +490,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
           </div>
         </div>
         <div className="flex items-center gap-1">
+
           <Button
             variant="ghost"
             size="sm"
@@ -491,9 +552,54 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
           )}
         </div>
       )}
+      
+      {/* Context Files Panel */}
+      {!showHistory && (
+        <div className="border-b p-2 bg-muted/20">
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-muted-foreground">Context Files ({contextFiles.length})</span>
+                {initialFile && !contextFiles.some(f => f.path === initialFile.path) && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-5 text-[10px] px-2 flex items-center gap-1"
+                        onClick={() => addFileToContext(initialFile)}
+                    >
+                        <Plus className="h-3 w-3" /> Add Current File
+                    </Button>
+                )}
+            </div>
+            {contextFiles.length > 0 ? (
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {contextFiles.map((file) => (
+                        <div key={file.path} className="flex items-center justify-between bg-background rounded px-2 py-1 border text-xs">
+                           <div className="flex items-center gap-1 overflow-hidden">
+                               {file.source === 'auto' && <Sparkles className="h-3 w-3 text-purple-500 flex-shrink-0" />}
+                               <div className="truncate max-w-[180px]" title={file.path}>
+                                    {file.path.split('/').pop()}
+                               </div>
+                           </div>
+                           <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-4 p-0 opacity-70 hover:opacity-100"
+                                onClick={() => removeFileFromContext(file.path)}
+                           >
+                                <X className="h-3 w-3" />
+                           </Button>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="text-[10px] text-muted-foreground text-center py-1">
+                    No files in context. AI won't see any code unless added.
+                </div>
+            )}
+        </div>
+      )}
 
       {/* Quick Actions */}
-      {currentFile && !showHistory && (
+      {initialFile && !showHistory && (
         <div className="p-2 border-b flex gap-1.5 flex-wrap">
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleGenerateCode}>
             <Wand2 className="h-3 w-3 mr-1" />개선
@@ -519,9 +625,12 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
             <p className="text-xs mt-2 max-w-[200px] mx-auto">
               코드를 생성하고, 바로 에디터에 적용하세요!
             </p>
-            {currentFile && (
-              <div className="mt-4 p-2 bg-muted rounded text-xs">📄 {currentFile.path}</div>
+            {initialFile && (
+              <div className="mt-4 p-2 bg-muted rounded text-xs">📄 {initialFile.path}</div>
             )}
+            <div className="text-[10px] text-muted-foreground mt-4">
+                Tip: Add files to context to let AI understand your project structure.
+            </div>
           </div>
         )}
 
@@ -559,8 +668,68 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t">
+      <div className="p-3 border-t relative">
+        {/* Suggestion Panel */}
+        {showSuggestions && (
+            <ContextSuggestionPanel
+                suggestions={suggestions}
+                onCancel={() => setShowSuggestions(false)}
+                onConfirm={(selected) => {
+                    const newFiles: FileContext[] = selected.map(s => ({
+                        id: s.id,
+                        path: s.path,
+                        content: s.content,
+                        language: s.path.split('.').pop(),
+                        source: 'auto'
+                    }));
+                    setContextFiles([...contextFiles, ...newFiles]);
+                    setShowSuggestions(false);
+                }}
+                className="absolute bottom-full left-4 mb-2 z-20 w-[calc(100%-2rem)]"
+            />
+        )}
+        <div className="flex justify-between items-center mb-2 px-1">
+          <ModelSelector 
+             value={selectedModel} 
+             onValueChange={handleModelChange} 
+             className="h-6 text-[10px] w-[140px] opacity-70 hover:opacity-100 transition-opacity"
+             placeholder="모델 선택"
+          />
+        </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={async () => {
+                if (!input.trim()) return;
+                setLoading(true);
+                try {
+                  const { data } = await api.post('/api/ai/context/search', { projectId, query: input });
+                  // Transform to Suggestion format
+                  const foundFiles: SuggestedFile[] = data.map((f: any) => ({
+                    id: f.path, 
+                    path: f.path, 
+                    content: f.content, 
+                    score: f.score || 0
+                  }));
+                  
+                  // Filter out already added files
+                  const newSuggestions = foundFiles.filter(nf => !contextFiles.some(cf => cf.path === nf.path));
+                  
+                  if (newSuggestions.length > 0) {
+                     setSuggestions(newSuggestions);
+                     setShowSuggestions(true);
+                  } else {
+                     // Maybe show a toast that no *new* relevant files found
+                  }
+                } catch (e) { console.error(e); } finally { setLoading(false); }
+            }}
+            disabled={loading || !input.trim()}
+            title="Auto-search relevant files" // Updated title
+            className={cn("flex-shrink-0 w-10 px-0 relative", showSuggestions && "ring-2 ring-purple-500")}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-purple-600" />}
+          </Button>
           <input
             type="text"
             value={input}
@@ -582,3 +751,4 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     </div>
   );
 }
+

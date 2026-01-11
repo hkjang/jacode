@@ -10,6 +10,8 @@ export interface ChainInput {
   filePath: string;
   language: string;
   stylePresetId?: string;
+  model?: string;
+  provider?: string;
 }
 
 export interface DesignResult {
@@ -137,7 +139,10 @@ Provide your response in JSON format:
     const response = await this.aiService.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: input.userPrompt },
-    ]);
+    ], {
+      model: input.model,
+      // provider: input.provider // AIService handles provider based on model or config
+    });
 
     try {
       const design = JSON.parse(this.extractJSON(response.content));
@@ -192,7 +197,9 @@ Explanation: [brief explanation]`;
     const response = await this.aiService.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: input.userPrompt },
-    ]);
+    ], {
+      model: input.model,
+    });
 
     const code = this.extractCode(response.content);
     const explanation = this.extractExplanation(response.content);
@@ -234,7 +241,9 @@ Provide your review in JSON format:
         role: 'user',
         content: `Review this ${input.language} code:\n\`\`\`${input.language}\n${code}\n\`\`\`\n\nOriginal request: ${input.userPrompt}`,
       },
-    ]);
+    ], {
+      model: input.model,
+    });
 
     try {
       const validation = JSON.parse(this.extractJSON(response.content));

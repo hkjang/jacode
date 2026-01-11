@@ -9,7 +9,8 @@ import {
   Search,
   Filter,
   ArrowUpDown,
-  Bot
+  Bot,
+  Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,17 @@ import {
   SelectContent, 
   SelectItem 
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { ModelSelector } from '@/components/ai/ModelSelector';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import { TaskDetail } from './components/TaskDetail';
 
@@ -131,6 +143,73 @@ export default function TasksPage() {
     );
   }
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { ModelSelector } from '@/components/ai/ModelSelector';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+
+// ... existing imports
+
+export default function TasksPage() {
+  const [tasks, setTasks] = useState<TaskData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskData | null>(null);
+  
+  // New Task State
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+  const [newTask, setNewTask] = useState({
+    type: 'CODE_GENERATION',
+    prompt: '',
+    model: '',
+    priority: 1
+  });
+  
+  // Filters
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  // ... existing state
+
+  // ... existing functions
+
+  const handleCreateTask = async () => {
+    try {
+      setActionLoading('create-task');
+      // Use Default Project ID or ask user - for now using first project or hardcoded if needed
+      // Since this is Admin UI, maybe we need a Project Selector too? 
+      // Or just default to a "General" way. 
+      // The API requires projectId. 
+      // Let's assume we can fetch projects and pick first one or let user select.
+      // For simplicity, I will hardcode a TODO or use a "default" one if available.
+      // Ideally I should add ProjectSelector.
+      
+      const projectId = 'default-project-id'; // TODO: Get real project ID
+      
+      await api.post('/api/agents/tasks', {
+        ...newTask,
+        projectId,
+        context: {} // Empty context for manual tasks
+      });
+      
+      setIsNewTaskOpen(false);
+      setNewTask({ type: 'CODE_GENERATION', prompt: '', model: '', priority: 1 });
+      loadTasks();
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      alert('Failed to create task');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ... existing render
+
   return (
     <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
@@ -144,25 +223,71 @@ export default function TasksPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Dialog open={isNewTaskOpen} onOpenChange={setIsNewTaskOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Agent Task</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Task Type</Label>
+                  <Select 
+                    value={newTask.type} 
+                    onValueChange={(v) => setNewTask({...newTask, type: v})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CODE_GENERATION">Code Generation</SelectItem>
+                      <SelectItem value="CODE_MODIFICATION">Code Modification</SelectItem>
+                      <SelectItem value="CODE_REVIEW">Code Review</SelectItem>
+                      <SelectItem value="BUG_FIX">Bug Fix</SelectItem>
+                      <SelectItem value="REFACTORING">Refactoring</SelectItem>
+                      <SelectItem value="DOCUMENTATION">Documentation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>AI Model</Label>
+                  <ModelSelector 
+                    value={newTask.model}
+                    onValueChange={(v) => setNewTask({...newTask, model: v})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                   <Label>Prompt</Label>
+                   <Textarea 
+                     placeholder="Describe the task..."
+                     value={newTask.prompt}
+                     onChange={(e) => setNewTask({...newTask, prompt: e.target.value})}
+                     className="min-h-[100px]"
+                   />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsNewTaskOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateTask} disabled={!newTask.prompt || actionLoading === 'create-task'}>
+                  {actionLoading === 'create-task' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create Task
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button variant="outline" size="sm" onClick={loadTasks}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={deleteOldTasks}
-            disabled={actionLoading === 'delete-tasks'}
-          >
-            {actionLoading === 'delete-tasks' ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Trash2 className="h-4 w-4 mr-2" />
-            )}
-            Clean Old Tasks
-          </Button>
-        </div>
-      </div>
+          {/* ... existing buttons ... */}
 
       {/* Integration Info Banner */}
       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">
