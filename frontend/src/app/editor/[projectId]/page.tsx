@@ -333,6 +333,7 @@ export default function EditorPage() {
                       tabSize: editorSettings?.tabSize,
                       wordWrap: editorSettings?.wordWrap as any,
                       minimap: { enabled: editorSettings?.minimap },
+                      quickSuggestions: editorSettings?.autoComplete,
                       // Theme is handled globally but we can enforce it if needed, 
                       // but MonacoEditor handles theme via next-themes.
                       // If we want to support 'editor.theme' from settings, we need to map it or pass it.
