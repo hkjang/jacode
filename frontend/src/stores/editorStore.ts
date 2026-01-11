@@ -44,6 +44,16 @@ interface EditorState {
     unloadedFileCount: number;
   };
 
+  // Editor System Settings
+  editorSettings: {
+    theme?: string;
+    fontSize?: number;
+    tabSize?: number;
+    wordWrap?: string;
+    minimap?: boolean;
+    autoComplete?: boolean;
+  };
+
   // Actions
   setCurrentProject: (projectId: string) => void;
   setFileTree: (tree: FileTreeNode[]) => void;
@@ -65,6 +75,7 @@ interface EditorState {
   unloadInactiveFiles: () => void;
   reloadFile: (id: string, content: string) => void;
   getMemoryStats: () => { totalCachedSize: number; cachedFileCount: number; unloadedFileCount: number };
+  loadEditorSettings: () => Promise<void>;
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -101,6 +112,7 @@ export const useEditorStore = create<EditorState>()(
             cachedFileCount: 0,
             unloadedFileCount: 0,
           },
+          editorSettings: get().editorSettings,
         });
       },
 
@@ -368,6 +380,33 @@ export const useEditorStore = create<EditorState>()(
       // Memory management: Get current memory stats
       getMemoryStats: () => {
         return get().memoryStats;
+      },
+
+      loadEditorSettings: async () => {
+        try {
+          // Dynamic import to avoid circular dependencies or use simple fetch if api not available
+          // Assuming api is available or we use fetch
+          const response = await fetch('/api/admin/settings/editor', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            // Map flat keys 'editor.fontSize' to clean object
+            const settings = {
+              theme: data['editor.theme'],
+              fontSize: Number(data['editor.fontSize']),
+              tabSize: Number(data['editor.tabSize']),
+              wordWrap: data['editor.wordWrap'],
+              minimap: data['editor.minimap'] === true || data['editor.minimap'] === 'true',
+              autoComplete: data['editor.autoComplete'],
+            };
+            set({ editorSettings: settings });
+          }
+        } catch (error) {
+          console.error('Failed to load editor settings', error);
+        }
       },
     }),
     {

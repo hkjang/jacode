@@ -53,6 +53,8 @@ export default function EditorPage() {
     toggleAI,
     showAgents,
     toggleAgents,
+    loadEditorSettings,
+    editorSettings,
   } = useEditorStore();
 
   const [projectName, setProjectName] = useState('');
@@ -70,7 +72,22 @@ export default function EditorPage() {
       return;
     }
     loadProject();
+    loadEditorSettings(); // Load system settings
   }, [projectId]);
+
+  // Listen for policy updates
+  const { socket } = useSocket();
+  useEffect(() => {
+    if (!socket) return;
+    const handleEvent = (data: any) => {
+       if (data.type === 'policy_update') {
+          // Toast is handled by NotificationCenter, we just reload settings
+          loadEditorSettings();
+       }
+    };
+    socket.on('notification', handleEvent);
+    return () => socket.off('notification', handleEvent);
+  }, [socket, loadEditorSettings]);
 
   const loadProject = async () => {
     try {
@@ -311,6 +328,15 @@ export default function EditorPage() {
                     path={activeFile.path}
                     onChange={(value) => updateFileContent(activeFile.id, value || '')}
                     onSave={handleSaveFile}
+                    options={{
+                      fontSize: editorSettings?.fontSize,
+                      tabSize: editorSettings?.tabSize,
+                      wordWrap: editorSettings?.wordWrap as any,
+                      minimap: { enabled: editorSettings?.minimap },
+                      // Theme is handled globally but we can enforce it if needed, 
+                      // but MonacoEditor handles theme via next-themes.
+                      // If we want to support 'editor.theme' from settings, we need to map it or pass it.
+                    }}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">

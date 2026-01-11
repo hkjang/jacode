@@ -176,8 +176,9 @@ export default function SettingsPage() {
                       <CardTitle className="text-sm">Editor Application</CardTitle>
                     </CardHeader>
                     <CardContent className="text-xs text-muted-foreground">
-                      에디터 설정(테마, 폰트 등)은 사용자가 페이지를 새로고침하거나 설정을 재로드할 때 적용됩니다. 
-                      'Policy Change Notification'이 켜져있으면 변경 즉시 알림이 갑니다.
+                      에디터 설정(테마, 폰트 등)은 <strong>실시간으로 적용됩니다</strong>. 
+                      관리자가 정책을 변경하면, 현재 작업 중인 모든 에디터 사용자에게 'Policy Update' 알림이 전송되며 
+                      새로운 설정이 <strong>즉시 자동 로드</strong>되어 화면에 반영됩니다. 새로고침할 필요가 없습니다.
                     </CardContent>
                   </Card>
                   <Card>
