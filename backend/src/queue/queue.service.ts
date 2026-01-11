@@ -6,6 +6,7 @@ import { QUEUE_NAMES } from './constants';
 export interface CodeGenerationJob {
   taskId: string;
   projectId: string;
+  userId?: string;
   prompt: string;
   context?: string;
   language?: string;
@@ -15,6 +16,7 @@ export interface CodeGenerationJob {
 export interface PlanGenerationJob {
   taskId: string;
   projectId: string;
+  userId?: string;
   requirements: string;
   context?: string;
 }

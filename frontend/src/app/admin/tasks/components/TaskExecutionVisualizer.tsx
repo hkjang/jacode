@@ -111,7 +111,10 @@ function getStepStatus(currentStatus: string, stepStage: string): 'completed' | 
   const stepIndex = order.indexOf(stepStage);
 
   if (currentIndex > stepIndex) return 'completed';
-  if (currentIndex === stepIndex) return 'current';
+  if (currentIndex === stepIndex) {
+    if (currentStatus === 'COMPLETED' && stepStage === 'COMPLETED') return 'completed';
+    return 'current';
+  }
   return 'pending';
 }
 

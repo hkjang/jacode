@@ -6,6 +6,7 @@ import { CodeProcessor } from './processors/code.processor';
 import { PlanProcessor } from './processors/plan.processor';
 import { QUEUE_NAMES } from './constants';
 import { AIModule } from '../ai/ai.module';
+import { AgentModule } from '../agent/agent.module';
 
 // Re-export for convenience
 export { QUEUE_NAMES } from './constants';
@@ -15,6 +16,7 @@ const logger = new Logger('QueueModule');
 @Module({
   imports: [
     forwardRef(() => AIModule),
+    forwardRef(() => AgentModule),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

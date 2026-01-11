@@ -5,10 +5,12 @@ import { AgentGateway } from './agent.gateway';
 import { AIModule } from '../ai/ai.module';
 import { QueueModule } from '../queue/queue.module';
 
+import { ArtifactModule } from '../artifact/artifact.module';
+
 @Module({
-  imports: [AIModule, QueueModule],
+  imports: [AIModule, QueueModule, ArtifactModule],
   providers: [AgentService, AgentGateway],
   controllers: [AgentController],
-  exports: [AgentService],
+  exports: [AgentService, AgentGateway],
 })
 export class AgentModule {}

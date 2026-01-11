@@ -108,10 +108,14 @@ export class ArtifactService {
     }
 
     const metadata = artifact.metadata as any;
-    const filePath = metadata?.filePath;
+    let filePath = metadata?.filePath;
 
     if (!filePath) {
-      throw new Error('Artifact does not have a target file path');
+      // Fallback for legacy artifacts or those created before the fix
+      const language = metadata?.language || 'typescript';
+      const ext = language === 'typescript' ? 'ts' : language === 'javascript' ? 'js' : 'txt';
+      filePath = `generated/legacy-artifact-${id}.${ext}`;
+      console.warn(`Artifact ${id} missing filePath, using fallback: ${filePath}`);
     }
 
     // Find or create the file

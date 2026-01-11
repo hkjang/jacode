@@ -194,7 +194,7 @@ export class ContextCollectorService {
   /**
    * Get project structure overview
    */
-  private async getProjectStructure(projectId: string) {
+  public async getProjectStructure(projectId: string) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });

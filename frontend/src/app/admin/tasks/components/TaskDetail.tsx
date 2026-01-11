@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   X, 
   FileText, 
@@ -8,13 +8,15 @@ import {
   AlertCircle,
   Clock,
   User,
-  Folder
+  Folder,
+  Code
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TaskExecutionVisualizer } from './TaskExecutionVisualizer';
+import { useSocket } from '@/providers/SocketProvider';
 
 interface TaskData {
   id: string;
@@ -37,11 +39,50 @@ interface TaskDetailProps {
   onAction: (action: string, data?: any) => Promise<void>;
 }
 
-export function TaskDetail({ task, onClose, onAction }: TaskDetailProps) {
+export function TaskDetail({ task: initialTask, onClose, onAction }: TaskDetailProps) {
+  const [task, setTask] = useState<TaskData>(initialTask);
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedArtifact, setSelectedArtifact] = useState<any | null>(null);
+  const { socket } = useSocket();
+
+  useEffect(() => {
+    setTask(initialTask);
+  }, [initialTask]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    function onTaskUpdate(updatedTask: any) {
+      if (updatedTask.id === task.id) {
+        setTask((prev) => ({ ...prev, ...updatedTask }));
+      }
+    }
+
+    function onTaskProgress(payload: { taskId: string, progress: number, currentStep?: string }) {
+      if (payload.taskId === task.id) {
+        setTask((prev) => ({ 
+          ...prev, 
+          progress: payload.progress,
+          currentStep: payload.currentStep
+        }));
+      }
+    }
+
+    socket.on('task:updated', onTaskUpdate);
+    socket.on('task:progress', onTaskProgress);
+    socket.on('task:completed', onTaskUpdate);
+    socket.on('task:failed', onTaskUpdate);
+
+    return () => {
+      socket.off('task:updated', onTaskUpdate);
+      socket.off('task:progress', onTaskProgress);
+      socket.off('task:completed', onTaskUpdate);
+      socket.off('task:failed', onTaskUpdate);
+    };
+  }, [socket, task.id]);
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[600px] bg-background border-l shadow-2xl z-50 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-[600px] bg-background border-l shadow-2xl z-50 flex flex-col transition-all duration-300">
       {/* Header */}
       <div className="p-6 border-b flex items-start justify-between bg-muted/10">
         <div className="space-y-1">
@@ -149,21 +190,58 @@ export function TaskDetail({ task, onClose, onAction }: TaskDetailProps) {
                   <p>No artifacts generated yet</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {task.artifacts.map((artifact: any) => (
-                    <div key={artifact.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
-                          <FileText className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{artifact.title}</p>
-                          <p className="text-xs text-muted-foreground">{artifact.type}</p>
-                        </div>
+                <div className="space-y-6">
+                  {selectedArtifact ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedArtifact(null)} className="-ml-2">
+                          ← Back to list
+                        </Button>
+                        <Badge variant="outline">{selectedArtifact.type}</Badge>
                       </div>
-                      <Badge variant="secondary">{artifact.status}</Badge>
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="bg-muted px-4 py-2 border-b flex items-center justify-between">
+                          <span className="font-mono text-sm">{selectedArtifact.title}</span>
+                          <span className="text-xs text-muted-foreground">{selectedArtifact.metadata?.filePath}</span>
+                        </div>
+                        <ScrollArea className="h-[400px] w-full bg-slate-950 text-slate-50 p-4 font-mono text-xs">
+                          <pre>{selectedArtifact.content || 'No content preview available'}</pre>
+                        </ScrollArea>
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-2">
+                      {task.artifacts.map((artifact: any) => (
+                        <div 
+                          key={artifact.id} 
+                          className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer group"
+                          onClick={() => {
+                            if (artifact.type === 'CODE' || artifact.type === 'DIFF') {
+                              setSelectedArtifact(artifact);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                              {artifact.type === 'CODE' ? <Code className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm group-hover:text-primary transition-colors">{artifact.title}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-muted-foreground">{artifact.type}</p>
+                                {(artifact.type === 'CODE' || artifact.type === 'DIFF') && (
+                                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Click to preview</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <Badge variant={artifact.status === 'APPROVED' ? 'default' : 'secondary'}>
+                            {artifact.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </TabsContent>

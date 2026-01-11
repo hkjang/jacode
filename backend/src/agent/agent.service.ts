@@ -5,6 +5,8 @@ import { AgentGateway } from './agent.gateway';
 import { CreateAgentTaskDto } from './dto/create-agent-task.dto';
 import { AgentStatus, AgentType } from '@prisma/client';
 import { QUEUE_NAMES } from '../queue/constants';
+import { ArtifactService } from '../artifact/artifact.service';
+import { ArtifactType } from '@prisma/client';
 
 @Injectable()
 export class AgentService {
@@ -12,6 +14,7 @@ export class AgentService {
     private readonly prisma: PrismaService,
     private readonly queueService: QueueService,
     private readonly agentGateway: AgentGateway,
+    private readonly artifactService: ArtifactService,
   ) {}
 
   /**
@@ -173,6 +176,24 @@ export class AgentService {
       throw new Error('Task is not waiting for approval');
     }
 
+    // Apply all code/diff artifacts
+    const artifacts = await this.prisma.artifact.findMany({
+      where: { 
+        agentTaskId: id,
+        type: { in: [ArtifactType.CODE, ArtifactType.DIFF] }
+      },
+    });
+
+    for (const artifact of artifacts) {
+      try {
+        await this.artifactService.applyCodeArtifact(artifact.id);
+      } catch (error) {
+        console.error(`Failed to apply artifact ${artifact.id}:`, error);
+        // We throw here to stop the approval process if application fails
+        throw new Error(`Failed to apply artifact ${artifact.id}: ${error.message}`);
+      }
+    }
+
     // Update all artifacts to approved
     await this.prisma.artifact.updateMany({
       where: { agentTaskId: id },
@@ -249,6 +270,7 @@ export class AgentService {
     const jobData = {
       taskId: task.id,
       projectId: task.projectId,
+      userId: task.userId,
       prompt: task.prompt,
       context: task.context,
     };
