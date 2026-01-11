@@ -36,6 +36,13 @@ export class CostAlertController {
 
   // ==================== Cost Alerts ====================
 
+  @Post('alerts/check')
+  @ApiOperation({ summary: 'Manually trigger cost alert check' })
+  async checkAlerts() {
+    await this.costAlertService.checkAlerts();
+    return { success: true, message: 'Cost alert check triggered' };
+  }
+
   @Get('alerts')
   @ApiOperation({ summary: 'Get all cost alerts' })
   @ApiQuery({ name: 'userId', required: false })

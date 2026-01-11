@@ -14,6 +14,12 @@ import {
   Timer,
   TrendingUp,
   X,
+  Info,
+  RotateCw,
+  History,
+  FileText,
+  Play,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -57,6 +63,10 @@ export default function CostAlertsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAlert, setEditingAlert] = useState<CostAlert | null>(null);
+  const [showExplainer, setShowExplainer] = useState(false);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -69,10 +79,38 @@ export default function CostAlertsPage() {
         api.get('/api/admin/cost/alerts'),
       ]);
       setAlerts(alertsRes.data || []);
+      loadLogs();
     } catch (error) {
       console.error('Failed to load alerts:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const res = await api.get('/api/admin/logs/system', { 
+        params: { category: 'cost_alert', limit: 5 } 
+      });
+      setRecentLogs(res.data.data || []);
+    } catch (error) {
+      console.error('Failed to load logs:', error);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleRunCheck = async () => {
+    setChecking(true);
+    try {
+      await api.post('/api/admin/cost/alerts/check');
+      await loadLogs(); // Refresh logs to see new triggers
+      await loadData(); // Refresh alerts to see lastTriggeredAt update
+    } catch (error) {
+      console.error('Failed to run check:', error);
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -126,18 +164,42 @@ export default function CostAlertsPage() {
         <div className="flex items-center gap-3">
           <Bell className="h-6 w-6 text-primary" />
           <div>
-            <h2 className="text-lg font-semibold">비용 알림 설정</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">비용 알림 설정</h2>
+              <button 
+                onClick={() => setShowExplainer(true)}
+                className="text-muted-foreground hover:text-primary transition"
+                title="어떻게 동작하나요?"
+              >
+                <Info className="h-4 w-4" />
+              </button>
+            </div>
             <p className="text-sm text-muted-foreground">토큰 사용량 및 비용 임계값 알림을 관리합니다</p>
           </div>
         </div>
-        <Button onClick={() => { setEditingAlert(null); setShowCreateModal(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          알림 추가
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+             variant="outline" 
+             onClick={handleRunCheck} 
+             disabled={checking}
+             className="gap-2"
+          >
+            {checking ? (
+              <RotateCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            지금 검사
+          </Button>
+          <Button onClick={() => { setEditingAlert(null); setShowCreateModal(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            알림 추가
+          </Button>
+        </div>
       </div>
 
       {/* Usage Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="p-4 border rounded-lg bg-card">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Coins className="h-4 w-4" />
@@ -148,9 +210,9 @@ export default function CostAlertsPage() {
         <div className="p-4 border rounded-lg bg-card">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <AlertTriangle className="h-4 w-4" />
-            최근 트리거
+            이번 달 트리거
           </div>
-          <p className="text-2xl font-bold mt-2">{alerts.filter(a => a.lastTriggeredAt).length}</p>
+          <p className="text-2xl font-bold mt-2">{alerts.filter(a => a.lastTriggeredAt && new Date(a.lastTriggeredAt).getMonth() === new Date().getMonth()).length}</p>
         </div>
         <div className="p-4 border rounded-lg bg-card">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -159,11 +221,21 @@ export default function CostAlertsPage() {
           </div>
           <p className="text-2xl font-bold mt-2">{alerts.length}</p>
         </div>
+        <div className="p-4 border rounded-lg bg-card">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+            <History className="h-4 w-4" />
+            최근 로그
+          </div>
+          <p className="text-2xl font-bold mt-2">{recentLogs.length}</p>
+        </div>
       </div>
 
-      {/* Alerts List */}
-      <div className="space-y-3">
-        <h3 className="font-medium">알림 규칙</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <h3 className="font-medium flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            알림 규칙
+          </h3>
         {alerts.length === 0 ? (
           <div className="p-8 border rounded-lg text-center text-muted-foreground">
             <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -240,6 +312,13 @@ export default function CostAlertsPage() {
         )}
       </div>
 
+
+
+        <div className="lg:col-span-1">
+           <CostAlertHistory logs={recentLogs} loading={loadingLogs} />
+        </div>
+      </div>
+
       {/* Create/Edit Modal */}
       {showCreateModal && (
         <AlertModal
@@ -248,6 +327,111 @@ export default function CostAlertsPage() {
           onSave={handleSaveAlert}
         />
       )}
+
+      {/* Explainer Modal */}
+       <AlertExplainer 
+        isOpen={showExplainer} 
+        onClose={() => setShowExplainer(false)} 
+      />
+    </div>
+  );
+}
+
+function CostAlertHistory({ logs, loading }: { logs: any[], loading: boolean }) {
+  return (
+    <div className="border rounded-lg bg-card h-full">
+      <div className="p-4 border-b">
+        <h3 className="font-medium flex items-center gap-2">
+          <History className="h-4 w-4" />
+          최근 알림 이력
+        </h3>
+      </div>
+      <div className="p-4">
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>최근 발생한 알림이 없습니다</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {logs.map((log) => (
+              <div key={log.id} className="text-sm border-l-2 border-yellow-500 pl-3 py-1">
+                <p className="font-medium">{log.message}</p>
+                <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
+                   <span>{new Date(log.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlertExplainer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border rounded-lg w-full max-w-lg p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Info className="h-5 w-5 text-primary" />
+            비용 알림 동작 방식
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-muted rounded">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        <div className="space-y-4 text-sm">
+          <div className="space-y-2">
+            <h4 className="font-medium flex items-center gap-2">
+              <Timer className="h-4 w-4 text-blue-500" />
+              모니터링 주기
+            </h4>
+            <p className="text-muted-foreground">
+              시스템은 <strong>매 시간(Hourly)</strong>마다 사용량을 집계하고 알림 조건을 검사합니다. 
+              설정된 임계값을 초과하더라도, 즉시 알림이 오지 않고 다음 정각 체크 시점에 발송될 수 있습니다.
+              <br/>
+              <span className="text-xs bg-muted px-1.5 py-0.5 rounded mt-1 inline-block">
+                팁: "지금 검사" 버튼으로 즉시 확인할 수 있습니다.
+              </span>
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="font-medium flex items-center gap-2">
+              <Coins className="h-4 w-4 text-yellow-500" />
+              임계값 및 기간
+            </h4>
+            <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+              <li><strong>일별(Daily):</strong> 매일 00:00부터 현재까지의 사용량을 체크합니다.</li>
+              <li><strong>월별(Monthly):</strong> 매월 1일부터 현재까지의 사용량을 체크합니다.</li>
+              <li>임계값은 해당 기간 내 누적값을 의미합니다.</li>
+            </ul>
+          </div>
+
+           <div className="space-y-2">
+            <h4 className="font-medium flex items-center gap-2">
+              <ToggleRight className="h-4 w-4 text-green-500" />
+              중복 알림 방지
+            </h4>
+            <p className="text-muted-foreground">
+              동일한 기간(예: 오늘, 이번 달) 내에 이미 알림이 발송되었다면, 
+              사용량이 계속 증가하더라도 중복해서 알림을 보내지 않습니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose}>확인</Button>
+        </div>
+      </div>
     </div>
   );
 }
