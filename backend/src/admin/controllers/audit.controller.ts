@@ -45,7 +45,7 @@ export class AuditController {
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
     });
-  });
+  }
 
   @Get('logs/resource')
   @ApiOperation({ summary: 'Get audit logs for a specific resource' })

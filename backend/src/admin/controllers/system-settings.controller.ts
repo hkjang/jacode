@@ -37,7 +37,7 @@ export class SystemSettingsController {
 
   @Patch('editor')
   @ApiOperation({ summary: 'Update editor policy' })
-  updateEditorPolicy(@Body() settings: Record<string, any>, @Request() req) {
+  updateEditorPolicy(@Body() settings: Record<string, any>, @Request() req: any) {
     return this.service.updateEditorPolicy(settings, req.user);
   }
 
@@ -49,7 +49,7 @@ export class SystemSettingsController {
 
   @Patch('queue')
   @ApiOperation({ summary: 'Update queue settings' })
-  updateQueueSettings(@Body() settings: Record<string, any>, @Request() req) {
+  updateQueueSettings(@Body() settings: Record<string, any>, @Request() req: any) {
     return this.service.updateQueueSettings(settings, req.user);
   }
 
@@ -61,7 +61,7 @@ export class SystemSettingsController {
 
   @Patch('model')
   @ApiOperation({ summary: 'Update model settings' })
-  updateModelSettings(@Body() settings: Record<string, any>, @Request() req) {
+  updateModelSettings(@Body() settings: Record<string, any>, @Request() req: any) {
     return this.service.updateModelSettings(settings, req.user);
   }
 
