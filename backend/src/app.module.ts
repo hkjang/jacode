@@ -14,6 +14,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AdminModule } from './admin/admin.module';
 import { ChatModule } from './chat/chat.module';
+import { McpModule } from './mcp/mcp.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ChatModule } from './chat/chat.module';
     KnowledgeModule,
     AdminModule,
     ChatModule,
+    McpModule,
 
     // Scheduling
     ScheduleModule.forRoot(),

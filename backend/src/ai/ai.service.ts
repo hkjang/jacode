@@ -11,8 +11,10 @@ import {
   ChatResponse, 
   ChatStreamChunk,
   AIProviderType,
-  CachedModelSettings
+  CachedModelSettings,
 } from './types';
+import { McpHostService } from '../mcp/services/mcp-host.service';
+import { ToolRegistryService } from '../mcp/services/tool-registry.service';
 
 @Injectable()
 export class AIService {
@@ -32,6 +34,8 @@ export class AIService {
     private readonly vllmProvider: VLLMProvider,
     private readonly circuitBreaker: CircuitBreakerService,
     private readonly featureToggleService: FeatureToggleService,
+    private readonly mcpHost: McpHostService,
+    private readonly toolRegistry: ToolRegistryService,
   ) {
     this.activeProvider = this.configService.get<AIProviderType>('AI_PROVIDER', 'ollama');
   }
@@ -142,6 +146,83 @@ export class AIService {
       this.circuitBreaker.recordFailure(resourceId);
       throw error;
     }
+  }
+
+  /**
+   * Chat with MCP Tool support
+   * Executes tools if the model requests them
+   */
+  async chatWithTools(
+    messages: ChatMessage[],
+    options: Partial<ChatOptions> & {
+      userId: string;
+      projectId?: string;
+      workingDirectory?: string;
+    }
+  ): Promise<ChatResponse> {
+    const tools = this.toolRegistry.getToolDefinitions();
+    let currentMessages = [...messages];
+    let turnCount = 0;
+    const MAX_TURNS = 5; // Prevent infinite loops
+
+    while (turnCount < MAX_TURNS) {
+       turnCount++;
+
+       // 1. Call Model with Tools
+       const response = await this.chat(currentMessages, {
+         ...options,
+         tools: tools, 
+       } as any);
+
+       // 2. Check for Tool Calls
+       if (response.tool_calls && response.tool_calls.length > 0) {
+          const toolResults = [];
+          
+          this.logger.log(`Received tool calls: ${response.tool_calls.map(tc => tc.function.name).join(', ')}`);
+
+          for (const call of response.tool_calls) {
+             try {
+                const args = JSON.parse(call.function.arguments);
+                const result = await this.mcpHost.executeTool(call.function.name, args, {
+                    sessionId: 'session-' + options.userId, 
+                    userId: options.userId,
+                    projectId: options.projectId,
+                    workingDirectory: options.workingDirectory
+                });
+                
+                toolResults.push({
+                    role: 'tool',
+                    tool_call_id: call.id,
+                    content: typeof result.content[0]?.text === 'string' ? result.content[0].text : JSON.stringify(result.content)
+                });
+             } catch (e) {
+                this.logger.error(`Error executing tool ${call.function.name}`, e);
+                toolResults.push({
+                    role: 'tool',
+                    tool_call_id: call.id,
+                    content: `Error: ${e.message}`
+                });
+             }
+          }
+          
+          // Append Assistant's tool call request
+          currentMessages.push({ 
+              role: 'assistant', 
+              content: response.content || '', 
+              tool_calls: response.tool_calls 
+          });
+          
+          // Append Tool Results
+          currentMessages.push(...toolResults as any);
+          
+          // Loop again to give results back to model
+          continue; 
+       }
+
+       return response;
+    }
+
+    return this.chat(currentMessages, options);
   }
 
   /**
@@ -437,7 +518,7 @@ Be specific and provide examples where applicable.`;
       },
     ]);
 
-    return response.content;
+    return response.content || '';
   }
 
   /**
@@ -499,7 +580,7 @@ Format the response in Markdown.`;
       model: options?.model,
     });
 
-    return response.content;
+    return response.content || '';
   }
 
   /**
@@ -580,7 +661,8 @@ Format the response in Markdown.`;
   /**
    * Extract code from markdown response
    */
-  private extractCodeFromResponse(response: string): string {
+  private extractCodeFromResponse(response: string | null): string {
+    if (!response) return '';
     const codeBlockRegex = /```[\w]*\n([\s\S]*?)```/g;
     const matches = [...response.matchAll(codeBlockRegex)];
 
@@ -592,9 +674,24 @@ Format the response in Markdown.`;
   }
 
   /**
+   * Extract JSON from response (handling markdown code blocks)
+   */
+  private extractJSON(response: string | null): string {
+    if (!response) return '{}';
+    // Try to find JSON block
+    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/```\n([\s\S]*?)\n```/);
+    if (jsonMatch) {
+      return jsonMatch[1];
+    }
+    // Fallback: assume whole string is JSON if valid
+    return response.trim();
+  }
+
+  /**
    * Extract explanation (text outside code blocks)
    */
-  private extractExplanation(response: string): string | undefined {
+  private extractExplanation(response: string | null): string | undefined {
+    if (!response) return undefined;
     const withoutCode = response.replace(/```[\w]*\n[\s\S]*?```/g, '').trim();
     return withoutCode || undefined;
   }

@@ -46,6 +46,7 @@ const navSections = [
       { href: '/admin/circuit-breakers', label: 'Circuit Breaker', icon: Heart },
       { href: '/admin/prompts', label: '프롬프트 템플릿', icon: FileText },
       { href: '/admin/code-styles', label: '코드 스타일', icon: Code },
+      { href: '/admin/mcp', label: 'MCP 도구', icon: Server },
       { href: '/admin/chat', label: '채팅 기록', icon: MessageSquare },
     ]
   },

@@ -2,8 +2,19 @@
  * Chat Message interface
  */
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string; // For role: 'tool'
+}
+
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
 }
 
 /**
@@ -16,6 +27,7 @@ export interface ChatOptions {
   topP?: number;
   stream?: boolean;
   stop?: string[];
+  tools?: any[]; // Tool definitions (JSON Schema)
 }
 
 /**
@@ -23,14 +35,15 @@ export interface ChatOptions {
  */
 export interface ChatResponse {
   id: string;
-  content: string;
+  content: string | null;
   model: string;
+  tool_calls?: ToolCall[];
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
-  finishReason?: 'stop' | 'length' | 'error';
+  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
 }
 
 /**

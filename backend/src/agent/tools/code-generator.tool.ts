@@ -156,7 +156,7 @@ Format: JSDoc/TSDoc style for JavaScript/TypeScript, docstrings for Python.`;
 
     return {
       success: true,
-      output: response.content,
+      output: response.content || '',
     };
   }
 

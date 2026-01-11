@@ -132,11 +132,11 @@ When you have completed the task, respond with:
         const assistantMessage = response.content;
         this.memoryManager.addMessage(taskId, {
           role: 'assistant',
-          content: assistantMessage,
+          content: assistantMessage || '',
         });
 
         // Parse the response
-        const parsed = this.parseAgentResponse(assistantMessage);
+        const parsed = this.parseAgentResponse(assistantMessage || '');
 
         // REASON step
         if (parsed.thought) {

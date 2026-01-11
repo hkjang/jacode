@@ -15,6 +15,12 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  tool_calls?: {
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }[];
   timestamp: Date;
 }
 
@@ -450,6 +456,11 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
                 setMessages((prev) => 
                   prev.map(m => m.id === assistantMsgId ? { ...m, content: fullContent } : m)
                 );
+              }
+              if (data.tool_calls) {
+                  setMessages((prev) => 
+                    prev.map(m => m.id === assistantMsgId ? { ...m, tool_calls: data.tool_calls } : m)
+                  );
               }
               // Capture usage if available (from final chunk)
               if (data.usage) {
@@ -917,7 +928,31 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
                   : 'bg-muted'
               }`}
             >
-              {message.role === 'assistant' ? renderMarkdown(message.content, message.id) : message.content}
+              {message.role === 'assistant' ? (
+                <>
+                  {message.tool_calls && message.tool_calls.length > 0 && (
+                      <div className="mb-2 space-y-1">
+                          {message.tool_calls.map((tool, i) => (
+                              <details key={i} className="group bg-background/50 rounded border text-xs overflow-hidden open:pb-2 transition-all">
+                                  <summary className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 select-none">
+                                      <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                                          <Wand2 className="h-3 w-3" />
+                                          <span>Executed: {tool.function.name}</span>
+                                      </div>
+                                      <span className="ml-auto text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">View Details</span>
+                                  </summary>
+                                  <div className="px-2 pt-1">
+                                      <div className="font-mono bg-muted/30 p-2 rounded text-[10px] whitespace-pre-wrap break-all max-h-32 overflow-auto">
+                                          {tool.function.arguments}
+                                      </div>
+                                  </div>
+                              </details>
+                          ))}
+                      </div>
+                  )}
+                  {renderMarkdown(message.content, message.id)}
+                </>
+              ) : message.content}
               
               {/* Message Actions (hover) */}
               <div className={`absolute -bottom-6 ${message.role === 'user' ? 'right-0' : 'left-0'} flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>

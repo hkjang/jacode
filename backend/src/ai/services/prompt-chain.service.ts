@@ -307,7 +307,8 @@ Provide your review in JSON format:
   /**
    * Extract JSON from response
    */
-  private extractJSON(response: string): string {
+  private extractJSON(response: string | null): string {
+    if (!response) return '{}';
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     return jsonMatch ? jsonMatch[0] : '{}';
   }
@@ -315,7 +316,8 @@ Provide your review in JSON format:
   /**
    * Extract code from markdown response
    */
-  private extractCode(response: string): string {
+  private extractCode(response: string | null): string {
+    if (!response) return '';
     const codeBlockRegex = /```[\w]*\n([\s\S]*?)```/;
     const match = response.match(codeBlockRegex);
     return match ? match[1].trim() : response.trim();
@@ -324,7 +326,8 @@ Provide your review in JSON format:
   /**
    * Extract explanation from response
    */
-  private extractExplanation(response: string): string {
+  private extractExplanation(response: string | null): string {
+    if (!response) return '';
     // Remove code blocks
     const withoutCode = response.replace(/```[\w]*\n[\s\S]*?```/g, '').trim();
     

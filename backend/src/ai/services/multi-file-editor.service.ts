@@ -268,7 +268,8 @@ Provide the complete updated file content.`;
   /**
    * Extract JSON from text
    */
-  private extractJSON(text: string): string {
+  private extractJSON(text: string | null): string {
+    if (!text) return '{}';
     const match = text.match(/\{[\s\S]*\}/);
     return match ? match[0] : '{}';
   }

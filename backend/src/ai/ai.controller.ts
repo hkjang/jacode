@@ -6,6 +6,7 @@ import {
   UseGuards,
   Res,
   HttpStatus,
+  Request,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -80,22 +81,52 @@ export class AIController {
 
   @Post('chat')
   @ApiOperation({ summary: 'Chat completion' })
-  async chat(@Body() dto: ChatDto) {
-    return this.aiService.chat(dto.messages, dto.options);
+  async chat(@Body() dto: ChatDto, @Request() req: any) {
+    const userId = req.user?.id;
+    return this.aiService.chatWithTools(dto.messages, {
+       ...dto.options, 
+       userId,
+       // Assuming projectId might be in options or we need to add it to DTO. 
+       // For now, let's look for it in options if DTO doesn't have it top-level
+       projectId: (dto.options as any)?.projectId,
+       workingDirectory: (dto.options as any)?.workingDirectory
+    });
   }
 
   @Post('chat/stream')
   @ApiOperation({ summary: 'Streaming chat completion' })
-  async chatStream(@Body() dto: ChatDto, @Res() res: Response) {
+  async chatStream(@Body() dto: ChatDto, @Res() res: Response, @Request() req: any) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
     try {
+      // Temporary: Use chatWithTools (non-streaming) and emit result as a single chunk
+      // This enables tool support while maintaining the stream API contract
+      const userId = req.user?.id;
+      const response = await this.aiService.chatWithTools(dto.messages, {
+         ...dto.options, 
+         userId,
+         projectId: (dto.options as any)?.projectId,
+         workingDirectory: (dto.options as any)?.workingDirectory
+      });
+
+      // Emit the final response as a stream chunk
+      res.write(`data: ${JSON.stringify({ 
+         content: response.content,
+         tool_calls: response.tool_calls, // Pass tool calls if needed by client
+         usage: response.usage
+      })}\n\n`);
+      
+      res.write(`data: [DONE]\n\n`);
+
+      /* 
+      // Original Streaming Logic (restored when chatWithTools supports streaming)
       for await (const chunk of this.aiService.chatStream(dto.messages, dto.options)) {
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
         if (chunk.done) break;
       }
+      */
     } catch (error) {
       res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     }

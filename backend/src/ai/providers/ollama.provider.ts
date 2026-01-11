@@ -59,6 +59,7 @@ export class OllamaProvider implements OnModuleInit {
         model,
         messages,
         stream: false,
+        tools: options?.tools, // Pass tools if present
         options: {
           temperature: options?.temperature ?? 0.7,
           num_predict: options?.maxTokens ?? 4096,
@@ -73,16 +74,27 @@ export class OllamaProvider implements OnModuleInit {
 
     const data = await response.json();
 
+    // Map Ollama tool calls to standard format
+    const toolCalls = data.message?.tool_calls?.map((tc: any) => ({
+       id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+       type: 'function',
+       function: {
+         name: tc.function.name,
+         arguments: JSON.stringify(tc.function.arguments),
+       }
+    }));
+
     return {
       id: `ollama-${Date.now()}`,
-      content: data.message?.content || '',
+      content: data.message?.content || null,
       model,
+      tool_calls: toolCalls,
       usage: {
         promptTokens: data.prompt_eval_count || 0,
         completionTokens: data.eval_count || 0,
         totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
       },
-      finishReason: 'stop',
+      finishReason: toolCalls?.length > 0 ? 'tool_calls' : 'stop',
     };
   }
 

@@ -132,7 +132,7 @@ Rule 4: Do not use markdown code blocks (\`\`\`) inside the <file> tags, just ra
       await this.updateTaskStatus(taskId, 'EXECUTING', 80, 'Creating artifacts...');
       this.agentGateway.notifyTaskProgress({ id: taskId, userId: job.data.userId || '', projectId: job.data.projectId || '', progress: 80, currentStep: 'Creating artifacts...' });
 
-      const responseContent = result.content;
+      const responseContent = result.content || ''; // Handle potential null content
       const fileRegex = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g;
       const files: { path: string; content: string }[] = [];
       let match;
@@ -174,10 +174,10 @@ Rule 4: Do not use markdown code blocks (\`\`\`) inside the <file> tags, just ra
         // Fallback to single file / legacy handling
         // Determine file path
         let filePath = (context as any)?.filePath;
-        let code = responseContent;
+        let code = responseContent || ''; // Ensure string
         
         // Strip markdown blocks if present (legacy format)
-        const codeBlockMatch = responseContent.match(/```[\w]*\n([\s\S]*?)```/);
+        const codeBlockMatch = (responseContent || '').match(/```[\w]*\n([\s\S]*?)```/);
         if (codeBlockMatch) {
             code = codeBlockMatch[1];
         }
