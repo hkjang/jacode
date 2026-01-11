@@ -53,6 +53,15 @@ fi
 
 docker-compose -f docker-compose.prod.yml up -d
 
+echo "⏳ Waiting for backend to be ready..."
+sleep 15
+
+echo "🏗️ Running Database Migrations..."
+docker-compose -f docker-compose.prod.yml exec -T backend npx prisma migrate deploy
+
+echo "🌱 Seeding Database..."
+docker-compose -f docker-compose.prod.yml exec -T backend node dist/prisma/seed.js
+
 echo "✅ Deployment Complete!"
 echo "Backend: http://localhost:4000"
 echo "Frontend: http://localhost:3000"
