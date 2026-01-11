@@ -51,6 +51,7 @@ export class VLLMProvider implements OnModuleInit {
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 4096,
         top_p: options?.topP ?? 0.9,
+        stop: options?.stop,
         stream: false,
       }),
     });
@@ -90,7 +91,9 @@ export class VLLMProvider implements OnModuleInit {
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 4096,
         top_p: options?.topP ?? 0.9,
+        stop: options?.stop,
         stream: true,
+        stream_options: { include_usage: true },
       }),
     });
 
@@ -119,18 +122,26 @@ export class VLLMProvider implements OnModuleInit {
         if (line.startsWith('data: ')) {
           const data = line.slice(6);
           if (data === '[DONE]') {
-            yield { id: `vllm-${Date.now()}`, content: '', done: true };
             return;
           }
 
           try {
             const parsed = JSON.parse(data);
             const delta = parsed.choices?.[0]?.delta?.content || '';
+            const usage = parsed.usage ? {
+              promptTokens: parsed.usage.prompt_tokens,
+              completionTokens: parsed.usage.completion_tokens,
+              totalTokens: parsed.usage.total_tokens,
+            } : undefined;
+
             yield {
               id: parsed.id || `vllm-${Date.now()}`,
               content: delta,
-              done: false,
+              done: false, // In vLLM/OpenAI, usage usually comes with a final chunk or separate chunk
+              usage,
             };
+            
+            // If we got usage, it's usually the end, but let's loop until [DONE]
           } catch (e) {
             // Skip invalid JSON
           }
