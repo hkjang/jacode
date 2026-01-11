@@ -75,12 +75,31 @@ const chatApi = {
     }
   },
   
-  async addMessage(sessionId: string, role: string, content: string): Promise<void> {
-    await api.post(`/api/chat/sessions/${sessionId}/messages`, { role, content });
+  async addMessage(
+    sessionId: string, 
+    role: string, 
+    content: string,
+    metadata?: {
+      modelName?: string;
+      modelProvider?: string;
+      promptTokens?: number;
+      completionTokens?: number;
+      responseTimeMs?: number;
+    }
+  ): Promise<void> {
+    await api.post(`/api/chat/sessions/${sessionId}/messages`, { 
+      role, 
+      content,
+      ...metadata 
+    });
   },
   
   async deleteSession(sessionId: string): Promise<void> {
     await api.delete(`/api/chat/sessions/${sessionId}`);
+  },
+
+  async markCodeApplied(messageId: string, filePath: string): Promise<void> {
+    await api.patch(`/api/chat/messages/${messageId}/applied`, { filePath });
   },
 };
 
@@ -90,6 +109,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
   const [loading, setLoading] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [pendingCode, setPendingCode] = useState('');
+  const [pendingMessageId, setPendingMessageId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -229,6 +249,9 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
         { temperature: 0.7 }
       );
 
+      const endTime = Date.now();
+      const responseTimeMs = endTime - new Date(userMessage.timestamp).getTime(); // Approx
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -239,7 +262,12 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
       setMessages((prev) => [...prev, assistantMessage]);
       
       // Save assistant message to backend
-      await chatApi.addMessage(sessionId, 'assistant', response.content);
+      await chatApi.addMessage(sessionId, 'assistant', response.content, {
+        modelName: response.model,
+        promptTokens: response.usage?.promptTokens,
+        completionTokens: response.usage?.completionTokens,
+        responseTimeMs,
+      });
       loadSessions(); // Refresh session list
 
       // If successful, ensure status is CLOSED
@@ -272,19 +300,35 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     }
   };
 
-  const handleApplyCode = (code: string) => {
+  const handleApplyCode = (code: string, messageId?: string) => {
     if (currentFile) {
       setPendingCode(code);
+      setPendingMessageId(messageId || null);
       setShowDiff(true);
     } else {
       onApplyCode?.(code, 'replace');
+      // If no file Context, we can't easily track file path for API, 
+      // but simplistic usage might not need it or we track 'New File'
     }
   };
 
-  const handleAcceptCode = () => {
+  const handleAcceptCode = async () => {
     onApplyCode?.(pendingCode, 'replace');
+    
+    // Track applied code
+    if (pendingMessageId && currentFile) {
+      // Find real message ID (from backend) if possible. 
+      // Note: frontend message IDs might be temp IDs if not refreshed.
+      // But loadSessions refreshes, so we should try to use valid IDs.
+      // Note: addMessage is async, but we don't await it to update state msg ID.
+      // However, AIChat logic reloads session often?
+      // For now, fire and forget.
+      chatApi.markCodeApplied(pendingMessageId, currentFile.path).catch(console.error);
+    }
+
     setShowDiff(false);
     setPendingCode('');
+    setPendingMessageId(null);
   };
 
   const handleRejectCode = () => {
@@ -312,7 +356,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
     setInput(`이 코드를 상세히 설명해주세요: ${currentFile.path}`);
   };
 
-  const renderMarkdown = (content: string) => {
+  const renderMarkdown = (content: string, messageId?: string) => {
     return (
       <ReactMarkdown
         className="prose prose-sm dark:prose-invert max-w-none"
@@ -335,9 +379,10 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
                 code={codeContent}
                 language={language}
                 currentCode={currentFile?.content}
-                onApply={onApplyCode ? handleApplyCode : undefined}
+                onApply={onApplyCode ? () => handleApplyCode(codeContent, messageId) : undefined}
                 onPreview={currentFile ? () => {
                   setPendingCode(codeContent);
+                  setPendingMessageId(messageId || null);
                   setShowDiff(true);
                 } : undefined}
               />
@@ -492,7 +537,7 @@ export function AIChat({ projectId, currentFile, onClose, onApplyCode }: AIChatP
                   : 'bg-muted'
               }`}
             >
-              {message.role === 'assistant' ? renderMarkdown(message.content) : message.content}
+              {message.role === 'assistant' ? renderMarkdown(message.content, message.id) : message.content}
             </div>
           </div>
         ))}

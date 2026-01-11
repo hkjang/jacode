@@ -15,6 +15,7 @@ import {
   Code
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { adminChatApi } from '@/lib/api';
 import Link from 'next/link';
 
@@ -25,6 +26,11 @@ interface ChatSession {
   project?: { name: string };
   _count: { messages: number };
   updatedAt: string;
+  tokenUsage?: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
 }
 
 interface ChatStats {
@@ -43,15 +49,26 @@ export default function AdminChatPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useEffect(() => {
     loadData();
-  }, [page]);
+  }, [page, debouncedSearch]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [sessionsRes, statsRes] = await Promise.all([
-        adminChatApi.getAllSessions({ page, limit: 10 }),
+        adminChatApi.getAllSessions({ page, limit: 10, search: debouncedSearch }),
         adminChatApi.getStats()
       ]);
       setSessions(sessionsRes.data);
@@ -89,15 +106,27 @@ export default function AdminChatPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <MessageSquare className="h-5 w-5" />
           AI 채팅 기록
         </h2>
-        <Button variant="outline" size="sm" onClick={loadData}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          새로고침
-        </Button>
+        
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="제목, 사용자, 프로젝트 검색..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Button variant="outline" size="icon" onClick={loadData}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -130,7 +159,8 @@ export default function AdminChatPage() {
               <th className="text-left px-4 py-3 font-medium text-sm">주제</th>
               <th className="text-left px-4 py-3 font-medium text-sm">사용자</th>
               <th className="text-left px-4 py-3 font-medium text-sm">프로젝트</th>
-              <th className="text-center px-4 py-3 font-medium text-sm">메시지 수</th>
+              <th className="text-center px-4 py-3 font-medium text-sm">메시지</th>
+              <th className="text-center px-4 py-3 font-medium text-sm">토큰 (Total)</th>
               <th className="text-left px-4 py-3 font-medium text-sm">마지막 활동</th>
               <th className="text-right px-4 py-3 font-medium text-sm">관리</th>
             </tr>
@@ -138,7 +168,7 @@ export default function AdminChatPage() {
           <tbody>
             {sessions.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   채팅 기록이 없습니다.
                 </td>
               </tr>
@@ -173,6 +203,18 @@ export default function AdminChatPage() {
                       <MessageSquare className="h-3 w-3" />
                       {session._count.messages}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {session.tokenUsage ? (
+                      <div className="text-sm font-mono">
+                        {session.tokenUsage.total.toLocaleString()}
+                        <div className="text-[10px] text-muted-foreground">
+                          P:{session.tokenUsage.prompt} / C:{session.tokenUsage.completion}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">

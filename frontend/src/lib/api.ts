@@ -237,7 +237,7 @@ export const aiApi = {
 
 // Admin Chat API
 export const adminChatApi = {
-  getAllSessions: async (params?: { page?: number; limit?: number; userId?: string; projectId?: string }) => {
+  getAllSessions: async (params?: { page?: number; limit?: number; userId?: string; projectId?: string; search?: string }) => {
     const { data } = await api.get('/api/admin/chat/sessions', { params });
     return data;
   },

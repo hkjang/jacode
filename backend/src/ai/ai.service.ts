@@ -1,4 +1,17 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+import { OllamaProvider } from './providers/ollama.provider';
+import { VLLMProvider } from './providers/vllm.provider';
 import { CircuitBreakerService } from './services/circuit-breaker.service';
+import { 
+  ChatMessage, 
+  ChatOptions, 
+  ChatResponse, 
+  ChatStreamChunk,
+  AIProviderType,
+  CachedModelSettings
+} from './types';
 
 @Injectable()
 export class AIService {
@@ -275,11 +288,13 @@ export class AIService {
       try {
         const { PromptChainService } = await import('./services/prompt-chain.service');
         const { ContextCollectorService } = await import('./services/context-collector.service');
+        const { CodeStyleService } = await import('./services/code-style.service');
         
         const promptChain = new PromptChainService(
           this,
           new ContextCollectorService(this.prisma),
-          this.prisma
+          this.prisma,
+          new CodeStyleService(this.prisma)
         );
 
         const result = await promptChain.executeChain({

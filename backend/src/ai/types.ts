@@ -41,3 +41,21 @@ export interface ChatStreamChunk {
   content: string;
   done: boolean;
 }
+
+/**
+ * AI Provider Type
+ */
+export type AIProviderType = 'ollama' | 'vllm';
+
+/**
+ * Cached Model Settings
+ */
+export interface CachedModelSettings {
+  model: string;
+  provider: AIProviderType;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  contextLength?: number;
+  cachedAt: number;
+}

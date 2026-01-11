@@ -4,10 +4,12 @@ const prisma = new PrismaClient();
 
 async function main() {
   try {
-    const users = await prisma.user.findMany();
-    console.log(`Users count: ${users.length}`);
-    users.forEach(u => {
-      console.log(`User: ${u.email}, Role: ${u.role}, ID: ${u.id}`);
+    const aiModels = await prisma.aIModelSetting.findMany({
+      select: { id: true, name: true, serverId: true }
+    });
+    console.log(`AI Models count: ${aiModels.length}`);
+    aiModels.forEach(m => {
+      console.log(`Model: ${m.name}, ServerId: ${m.serverId}`);
     });
   } catch (e) {
     console.error('Error connecting to DB:', e);

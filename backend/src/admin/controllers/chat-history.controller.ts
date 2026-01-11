@@ -14,6 +14,7 @@ export class ChatHistoryController {
   async getAllSessions(
     @Query('userId') userId?: string,
     @Query('projectId') projectId?: string,
+    @Query('search') search?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '20',
   ) {
@@ -23,6 +24,15 @@ export class ChatHistoryController {
     const where: any = {};
     if (userId) where.userId = userId;
     if (projectId) where.projectId = projectId;
+    
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { project: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
 
     const [sessions, total] = await Promise.all([
       this.prisma.chatSession.findMany({
@@ -39,8 +49,31 @@ export class ChatHistoryController {
       this.prisma.chatSession.count({ where }),
     ]);
 
+    // Calculate token usage for the fetched sessions
+    const sessionIds = sessions.map((s) => s.id);
+    const tokenStats = await this.prisma.chatMessage.groupBy({
+      by: ['sessionId'],
+      where: { sessionId: { in: sessionIds } },
+      _sum: {
+        promptTokens: true,
+        completionTokens: true,
+      },
+    });
+
+    const sessionsWithTokens = sessions.map((session) => {
+      const stats = tokenStats.find((s) => s.sessionId === session.id);
+      return {
+        ...session,
+        tokenUsage: {
+          prompt: stats?._sum.promptTokens || 0,
+          completion: stats?._sum.completionTokens || 0,
+          total: (stats?._sum.promptTokens || 0) + (stats?._sum.completionTokens || 0),
+        },
+      };
+    });
+
     return {
-      data: sessions,
+      data: sessionsWithTokens,
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / take),

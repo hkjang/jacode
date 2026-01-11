@@ -341,6 +341,9 @@ model AIModelSetting {
   isDefault Boolean @default(false)
   isActive  Boolean @default(true)
   
+  serverId String?
+  server   ModelServer? @relation(fields: [serverId], references: [id])
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -388,6 +391,8 @@ model ModelServer {
   settings Json @default("{}")
   
   isActive Boolean @default(true)
+  
+  aiModels AIModelSetting[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

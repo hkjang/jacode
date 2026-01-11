@@ -207,6 +207,7 @@ export class AdminController {
       name: string;
       provider: string;
       model: string;
+      serverId?: string;
       isActive?: boolean;
       settings?: object;
     },
@@ -216,6 +217,7 @@ export class AdminController {
         name: body.name,
         provider: body.provider,
         model: body.model,
+        serverId: body.serverId,
         isActive: body.isActive ?? true,
         isDefault: false,
         settings: body.settings || {},
@@ -231,6 +233,7 @@ export class AdminController {
       name?: string;
       provider?: string;
       model?: string;
+      serverId?: string;
       isActive?: boolean; 
       settings?: object;
     },
