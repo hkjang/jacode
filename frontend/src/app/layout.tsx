@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { I18nProvider } from '@/contexts/I18nContext';
+import { Toaster } from 'sonner';
 import '@/styles/globals.css';
 
 const inter = Inter({
@@ -38,6 +39,7 @@ export default function RootLayout({
         >
           <I18nProvider>
             {children}
+            <Toaster />
           </I18nProvider>
         </ThemeProvider>
       </body>
