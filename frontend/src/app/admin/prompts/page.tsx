@@ -290,7 +290,7 @@ export default function PromptsPage() {
     t.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loadTemplates && loading && templates.length === 0) {
+  if (loading && templates.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

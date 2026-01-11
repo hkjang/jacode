@@ -181,7 +181,7 @@ export function RoutingSimulator({ initialWeights, modelPreferences }: RoutingSi
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{result.name}</span>
                     <span className="text-xs text-muted-foreground">({result.provider})</span>
-                    {!result.isPreferred && modelPreferences?.[promptType]?.length > 0 && (
+                    {!result.isPreferred && ((modelPreferences?.[promptType]?.length || 0) > 0) && (
                       <span className="text-[10px] bg-red-100 text-red-700 px-1 rounded">Not Preferred</span>
                     )}
                   </div>

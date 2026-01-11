@@ -6,9 +6,23 @@ import {
   Loader2,
   Trash2,
   RefreshCw,
+  Search,
+  Filter,
+  ArrowUpDown,
+  Bot
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Select, 
+  SelectTrigger, 
+  SelectValue, 
+  SelectContent, 
+  SelectItem 
+} from '@/components/ui/select';
 import { api } from '@/lib/api';
+import { TaskDetail } from './components/TaskDetail';
 
 interface TaskData {
   id: string;
@@ -18,12 +32,21 @@ interface TaskData {
   createdAt: string;
   user: { name: string; email: string };
   project: { name: string };
+  error?: string;
+  progress?: number;
+  currentStep?: string;
+  artifacts?: any[];
 }
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskData | null>(null);
+  
+  // Filters
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadTasks();
@@ -55,6 +78,51 @@ export default function TasksPage() {
     }
   };
 
+  const handleTaskAction = async (action: string, taskId: string, data?: any) => {
+    try {
+      switch (action) {
+        case 'cancel':
+          await api.post(`/api/agents/tasks/${taskId}/cancel`);
+          break;
+        case 'retry':
+          await api.post(`/api/agents/tasks/${taskId}/retry`);
+          break;
+        case 'approve':
+          await api.post(`/api/agents/tasks/${taskId}/approve`);
+          break;
+        case 'reject':
+          await api.post(`/api/agents/tasks/${taskId}/reject`, data);
+          break;
+      }
+      // Reload specific task to update UI
+      const res = await api.get(`/api/agents/tasks/${taskId}`);
+      const updatedTask = res.data;
+      
+      // Update local state
+      setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+      if (selectedTask?.id === taskId) {
+        setSelectedTask(updatedTask);
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} task:`, error);
+      alert(`Failed to ${action} task`);
+    }
+  };
+
+  const filteredTasks = tasks.filter(task => {
+    if (statusFilter !== 'ALL' && task.status !== statusFilter) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        task.prompt.toLowerCase().includes(query) ||
+        task.user?.name.toLowerCase().includes(query) ||
+        task.project?.name.toLowerCase().includes(query) ||
+        task.type.toLowerCase().includes(query)
+      );
+    }
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -64,12 +132,17 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Activity className="h-5 w-5" />
-          Recent Agent Tasks ({tasks.length})
-        </h2>
+        <div>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Agent Tasks Management
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Monitor and manage AI agent tasks across all projects
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadTasks}>
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -91,12 +164,57 @@ export default function TasksPage() {
         </div>
       </div>
 
+      {/* Integration Info Banner */}
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">
+        <Bot className="h-5 w-5 text-blue-600 mt-1" />
+        <div>
+          <h3 className="text-sm font-medium text-blue-700">Editor Integration</h3>
+          <p className="text-sm text-blue-600/80 mt-1">
+            These tasks are created directly from the IDE when users use the AI Assistant. 
+            The status reflected here corresponds to the real-time feedback users see in their editor.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search by prompt, project, or user..." 
+            className="pl-9"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Statuses</SelectItem>
+            <SelectItem value="PENDING">Pending</SelectItem>
+            <SelectItem value="PLANNING">Planning</SelectItem>
+            <SelectItem value="EXECUTING">Executing</SelectItem>
+            <SelectItem value="WAITING_APPROVAL">Waiting Approval</SelectItem>
+            <SelectItem value="COMPLETED">Completed</SelectItem>
+            <SelectItem value="FAILED">Failed</SelectItem>
+            <SelectItem value="CANCELLED">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="rounded-lg border bg-card overflow-hidden">
         <table className="w-full">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-sm">Type</th>
-              <th className="text-left px-4 py-3 font-medium text-sm">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-sm">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-primary">
+                  Status
+                  <ArrowUpDown className="h-3 w-3" />
+                </div>
+              </th>
               <th className="text-left px-4 py-3 font-medium text-sm">User</th>
               <th className="text-left px-4 py-3 font-medium text-sm">Project</th>
               <th className="text-left px-4 py-3 font-medium text-sm">Prompt</th>
@@ -104,8 +222,18 @@ export default function TasksPage() {
             </tr>
           </thead>
           <tbody>
-            {tasks.map((t) => (
-              <tr key={t.id} className="border-t hover:bg-muted/30">
+            {filteredTasks.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  No tasks found matching your filters.
+                </td>
+              </tr>
+            ) : filteredTasks.map((t) => (
+              <tr 
+                key={t.id} 
+                className={`border-t hover:bg-muted/30 cursor-pointer ${selectedTask?.id === t.id ? 'bg-muted/50' : ''}`}
+                onClick={() => setSelectedTask(t)}
+              >
                 <td className="px-4 py-3">
                   <span className="text-xs font-mono bg-muted px-2 py-1 rounded">
                     {t.type.replace('_', ' ')}
@@ -116,7 +244,9 @@ export default function TasksPage() {
                 </td>
                 <td className="px-4 py-3 text-sm">{t.user?.name || 'Unknown'}</td>
                 <td className="px-4 py-3 text-sm">{t.project?.name || 'Unknown'}</td>
-                <td className="px-4 py-3 text-sm max-w-xs truncate">{t.prompt}</td>
+                <td className="px-4 py-3 text-sm max-w-xs truncate" title={t.prompt}>
+                  {t.prompt}
+                </td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">
                   {new Date(t.createdAt).toLocaleString()}
                 </td>
@@ -125,23 +255,34 @@ export default function TasksPage() {
           </tbody>
         </table>
       </div>
+
+      {selectedTask && (
+        <>
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 transition-all duration-100" onClick={() => setSelectedTask(null)} />
+          <TaskDetail 
+            task={selectedTask} 
+            onClose={() => setSelectedTask(null)} 
+            onAction={handleTaskAction}
+          />
+        </>
+      )}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    COMPLETED: 'bg-green-500/20 text-green-600',
-    EXECUTING: 'bg-blue-500/20 text-blue-600',
-    PENDING: 'bg-yellow-500/20 text-yellow-600',
-    FAILED: 'bg-red-500/20 text-red-600',
-    CANCELLED: 'bg-gray-500/20 text-gray-600',
-    PLANNING: 'bg-purple-500/20 text-purple-600',
-    WAITING_APPROVAL: 'bg-orange-500/20 text-orange-600',
+    COMPLETED: 'bg-green-500/10 text-green-600 border-green-500/20',
+    EXECUTING: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+    PENDING: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
+    FAILED: 'bg-red-500/10 text-red-600 border-red-500/20',
+    CANCELLED: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
+    PLANNING: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+    WAITING_APPROVAL: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
   };
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || 'bg-muted'}`}>
+    <Badge variant="outline" className={`font-normal ${colors[status] || 'bg-muted text-muted-foreground'}`}>
       {status.replace('_', ' ')}
-    </span>
+    </Badge>
   );
 }

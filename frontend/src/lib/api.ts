@@ -214,6 +214,11 @@ export const aiApi = {
     return data;
   },
 
+  getProviderInfo: async () => {
+    const { data } = await api.get('/api/ai/info');
+    return data;
+  },
+
   listModels: async () => {
     const { data } = await api.get('/api/ai/models');
     return data;

@@ -414,7 +414,7 @@ function ModelFormModal({
               <label className="block text-sm font-medium mb-1">Provider *</label>
               <select
                 value={form.provider}
-                onChange={(e) => setForm({ ...form, provider: e.target.value, model: '', serverId: '' })}
+                onChange={(e) => setForm({ ...form, provider: e.target.value as 'ollama' | 'vllm', model: '', serverId: '' })}
                 className="w-full px-3 py-2 rounded border bg-background"
               >
                 <option value="ollama">Ollama</option>

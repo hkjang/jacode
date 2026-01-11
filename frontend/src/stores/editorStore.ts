@@ -83,7 +83,7 @@ export const useEditorStore = create<EditorState>()(
         unloadedFileCount: 0,
       },
 
-      setCurrentProject: (projectId) => {
+      setCurrentProject: (projectId: string) => {
         const { currentProjectId } = get();
         if (currentProjectId === projectId) return;
 
@@ -104,23 +104,23 @@ export const useEditorStore = create<EditorState>()(
         });
       },
 
-      setFileTree: (tree) => {
+      setFileTree: (tree: FileTreeNode[]) => {
         set({ fileTree: tree });
       },
 
-      toggleAI: (show) => {
-        set((state) => ({ showAI: show !== undefined ? show : !state.showAI }));
+      toggleAI: (show?: boolean) => {
+        set((state: EditorState) => ({ showAI: show !== undefined ? show : !state.showAI }));
       },
 
-      toggleAgents: (show) => {
-        set((state) => ({ showAgents: show !== undefined ? show : !state.showAgents }));
+      toggleAgents: (show?: boolean) => {
+        set((state: EditorState) => ({ showAgents: show !== undefined ? show : !state.showAgents }));
       },
 
-      openFile: (file) => {
+      openFile: (file: { id: string; path: string; name: string; content: string; language?: string }) => {
         const { files, openTabs, memoryStats } = get();
 
         // Check if file is already open
-        const existingTab = openTabs.find((t) => t.id === file.id);
+        const existingTab = openTabs.find((t: FileTab) => t.id === file.id);
         if (existingTab) {
           // Update last access time
           const existingFile = files.get(file.id);
@@ -168,18 +168,18 @@ export const useEditorStore = create<EditorState>()(
         });
       },
 
-      closeFile: (id) => {
+      closeFile: (id: string) => {
         const { files, openTabs, activeTabId } = get();
 
         const newFiles = new Map(files);
         newFiles.delete(id);
 
-        const newTabs = openTabs.filter((t) => t.id !== id);
+        const newTabs = openTabs.filter((t: FileTab) => t.id !== id);
         let newActiveTabId = activeTabId;
 
         if (activeTabId === id) {
           // Switch to another tab
-          const closedIndex = openTabs.findIndex((t) => t.id === id);
+          const closedIndex = openTabs.findIndex((t: FileTab) => t.id === id);
           if (newTabs.length > 0) {
             newActiveTabId = newTabs[Math.min(closedIndex, newTabs.length - 1)].id;
           } else {
@@ -194,7 +194,7 @@ export const useEditorStore = create<EditorState>()(
         });
       },
 
-      updateFileContent: (id, content) => {
+      updateFileContent: (id: string, content: string) => {
         const { files, openTabs } = get();
         const file = files.get(id);
         if (!file) return;
@@ -204,14 +204,14 @@ export const useEditorStore = create<EditorState>()(
         const newFiles = new Map(files);
         newFiles.set(id, { ...file, content, isDirty });
 
-        const newTabs = openTabs.map((t) =>
+        const newTabs = openTabs.map((t: FileTab) =>
           t.id === id ? { ...t, isDirty } : t,
         );
 
         set({ files: newFiles, openTabs: newTabs });
       },
 
-      saveFile: (id) => {
+      saveFile: (id: string) => {
         const { files, openTabs } = get();
         const file = files.get(id);
         if (!file) return;
@@ -223,22 +223,22 @@ export const useEditorStore = create<EditorState>()(
           originalContent: file.content,
         });
 
-        const newTabs = openTabs.map((t) =>
+        const newTabs = openTabs.map((t: FileTab) =>
           t.id === id ? { ...t, isDirty: false } : t,
         );
 
         set({ files: newFiles, openTabs: newTabs });
       },
 
-      setActiveTab: (id) => {
+      setActiveTab: (id: string) => {
         set({ activeTabId: id });
       },
 
-      addFileToTree: (parentPath, file) => {
+      addFileToTree: (parentPath: string, file: FileTreeNode) => {
         const { fileTree } = get();
 
         const addToNode = (nodes: FileTreeNode[]): FileTreeNode[] => {
-          return nodes.map((node) => {
+          return nodes.map((node: FileTreeNode) => {
             if (node.path === parentPath && node.isDirectory && node.children) {
               return {
                 ...node,
@@ -260,13 +260,13 @@ export const useEditorStore = create<EditorState>()(
         set({ fileTree: parentPath ? addToNode(fileTree) : [...fileTree, file] });
       },
 
-      removeFileFromTree: (path) => {
+      removeFileFromTree: (path: string) => {
         const { fileTree } = get();
 
         const removeFromNode = (nodes: FileTreeNode[]): FileTreeNode[] => {
           return nodes
-            .filter((node) => node.path !== path)
-            .map((node) => {
+            .filter((node: FileTreeNode) => node.path !== path)
+            .map((node: FileTreeNode) => {
               if (node.children) {
                 return { ...node, children: removeFromNode(node.children) };
               }
@@ -277,11 +277,11 @@ export const useEditorStore = create<EditorState>()(
         set({ fileTree: removeFromNode(fileTree) });
       },
 
-      renameFileInTree: (path, newName) => {
+      renameFileInTree: (path: string, newName: string) => {
         const { fileTree } = get();
 
         const renameInNode = (nodes: FileTreeNode[]): FileTreeNode[] => {
-          return nodes.map((node) => {
+          return nodes.map((node: FileTreeNode) => {
             if (node.path === path) {
               const newPath = path.replace(/[^/]+$/, newName);
               return { ...node, name: newName, path: newPath };
@@ -305,9 +305,9 @@ export const useEditorStore = create<EditorState>()(
         let unloadedCount = 0;
 
         // Sort files by last access time to determine which to unload
-        const sortedFiles = Array.from(files.entries())
-          .filter(([id, file]) => id !== activeTabId && !file.isDirty && !file.isUnloaded)
-          .sort((a, b) => a[1].lastAccessTime - b[1].lastAccessTime);
+        const sortedFiles = (Array.from(files.entries()) as [string, EditorFile][])
+          .filter(([id, file]: [string, EditorFile]) => id !== activeTabId && !file.isDirty && !file.isUnloaded)
+          .sort((a: [string, EditorFile], b: [string, EditorFile]) => a[1].lastAccessTime - b[1].lastAccessTime);
 
         for (const [id, file] of sortedFiles) {
           // Unload files inactive for more than threshold OR if we have too many cached
@@ -339,7 +339,7 @@ export const useEditorStore = create<EditorState>()(
       },
 
       // Memory management: Reload unloaded file content
-      reloadFile: (id, content) => {
+      reloadFile: (id: string, content: string) => {
         const { files, memoryStats } = get();
         const file = files.get(id);
         if (!file || !file.isUnloaded) return;
@@ -379,7 +379,7 @@ export const useEditorStore = create<EditorState>()(
         openTabs: state.openTabs,
         activeTabId: state.activeTabId,
         // Save files with content for persistence (limit to dirty files to save space)
-        files: Array.from(state.files.entries()).map(([id, file]) => ({
+        files: (Array.from(state.files.entries()) as [string, EditorFile][]).map(([id, file]) => ({
           id,
           path: file.path,
           name: file.name,
