@@ -273,4 +273,16 @@ export const adminChatApi = {
   },
 };
 
+export const featureApi = {
+  getEnabled: async () => {
+    const { data } = await api.get('/api/admin/features/enabled');
+    return data;
+  },
+
+  getAll: async () => {
+    const { data } = await api.get('/api/admin/features');
+    return data;
+  },
+};
+
 export default api;

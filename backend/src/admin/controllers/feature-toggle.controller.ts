@@ -17,12 +17,12 @@ import { FeatureToggleService } from '../services/feature-toggle.service';
 @ApiTags('admin/features')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
 @Controller('api/admin/features')
 export class FeatureToggleController {
   constructor(private readonly service: FeatureToggleService) {}
 
   @Get()
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get all feature toggles' })
   findAll() {
     return this.service.findAll();
@@ -35,6 +35,7 @@ export class FeatureToggleController {
   }
 
   @Get(':key')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get feature by key' })
   findByKey(@Param('key') key: string) {
     return this.service.findByKey(key);
@@ -47,18 +48,21 @@ export class FeatureToggleController {
   }
 
   @Patch(':key/toggle')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Toggle feature' })
   toggle(@Param('key') key: string, @Body() data: { isEnabled: boolean }) {
     return this.service.toggle(key, data.isEnabled);
   }
 
   @Patch(':key/settings')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Update feature settings' })
   updateSettings(@Param('key') key: string, @Body() settings: object) {
     return this.service.updateSettings(key, settings);
   }
 
   @Post()
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Create feature toggle' })
   create(@Body() data: {
     key: string;

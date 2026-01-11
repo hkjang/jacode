@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { AdminController } from './admin.controller';
+import { FeatureToggleModule } from './feature-toggle.module';
 
 // Services
 import {
   ModelServerService,
-  FeatureToggleService,
   PromptTemplateService,
   AnalyticsService,
   LogService,
@@ -28,7 +28,6 @@ import { MonitoringService } from './services/monitoring.service';
 import {
   ModelServerController,
   PromptTemplateController,
-  FeatureToggleController,
   AnalyticsController,
   LogController,
   TeamController,
@@ -58,12 +57,12 @@ import { AIModule } from '../ai/ai.module';
     ScheduleModule.forRoot(),
     BullModule.registerQueue({ name: 'agent-tasks' }),
     AIModule,
+    FeatureToggleModule,
   ],
   controllers: [
     AdminController,
     ModelServerController,
     PromptTemplateController,
-    FeatureToggleController,
     AnalyticsController,
     LogController,
     TeamController,
@@ -88,7 +87,6 @@ import { AIModule } from '../ai/ai.module';
   ],
   providers: [
     ModelServerService,
-    FeatureToggleService,
     PromptTemplateService,
     AnalyticsService,
     LogService,
@@ -106,7 +104,7 @@ import { AIModule } from '../ai/ai.module';
   ],
   exports: [
     ModelServerService,
-    FeatureToggleService,
+    FeatureToggleModule,
     PromptTemplateService,
     AnalyticsService,
     LogService,

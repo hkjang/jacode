@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { FeatureToggleModule } from '../admin/feature-toggle.module';
 import { AIService } from './ai.service';
 import { AIController } from './ai.controller';
 import { OllamaProvider } from './providers/ollama.provider';
@@ -17,7 +18,7 @@ import { MultiFileEditorService } from './services/multi-file-editor.service';
 import { BatchProcessingService } from './services/batch-processing.service';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, FeatureToggleModule],
   providers: [
     AIService,
     OllamaProvider,

@@ -8,8 +8,27 @@ import {
   ToggleRight,
   Settings,
   RefreshCw,
+  Info,
+  Shield,
+  Code2,
+  Wand2,
+  FileDiff,
+  MessageSquareQuote,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { api } from '@/lib/api';
 
 interface FeatureToggle {
@@ -20,6 +39,15 @@ interface FeatureToggle {
   isEnabled: boolean;
   settings: any;
 }
+
+const FEATURE_METADATA: Record<string, { icon: any, label: string, enforcement: string, statusColor: string }> = {
+  'smart_context': { icon: MessageSquareQuote, label: 'Smart Context', enforcement: 'Prompt Chain Service', statusColor: 'bg-blue-500/10 text-blue-500' },
+  'patch_generation': { icon: FileDiff, label: 'Patch Generation', enforcement: 'Code Generation Service', statusColor: 'bg-purple-500/10 text-purple-500' },
+  'inline_explain': { icon: MessageSquareQuote, label: 'Inline Explain', enforcement: 'Editor UI / AI Service', statusColor: 'bg-green-500/10 text-green-500' },
+  'auto_fix': { icon: Wand2, label: 'Auto Fix', enforcement: 'Modify Code API', statusColor: 'bg-orange-500/10 text-orange-500' },
+  'code_security_filter': { icon: Shield, label: 'Security Filter', enforcement: 'Active Blocking (Pre-check)', statusColor: 'bg-red-500/10 text-red-500' },
+  'code_review': { icon: Code2, label: 'Code Review', enforcement: 'Review Service (Middleware)', statusColor: 'bg-indigo-500/10 text-indigo-500' },
+};
 
 export default function FeaturesPage() {
   const [features, setFeatures] = useState<FeatureToggle[]>([]);
@@ -78,83 +106,153 @@ export default function FeaturesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Zap className="h-5 w-5" />
-          Feature Toggles
-        </h2>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Zap className="h-6 w-6 text-yellow-500" />
+            Feature Management
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Manage system-wide feature toggles and their enforcement policies.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadFeatures}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={initializeDefaults}>
-            Initialize Defaults
-          </Button>
+          {features.length === 0 && (
+            <Button size="sm" onClick={initializeDefaults}>
+              Initialize Defaults
+            </Button>
+          )}
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        바이브코딩 기능들을 활성화하거나 비활성화합니다.
-      </p>
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Feature Toggles</CardTitle>
+            <CardDescription>
+              Enable or disable specific AI capabilities. Changes applied immediately.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {features.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No features configured. Click "Initialize Defaults" to create default features.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Feature</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Enforcement</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {features.map((feature) => {
+                    const meta = FEATURE_METADATA[feature.key] || { icon: Settings, label: feature.name, enforcement: 'Unknown', statusColor: 'bg-gray-100 text-gray-800' };
+                    const Icon = meta.icon;
+                    
+                    return (
+                      <TableRow key={feature.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-md ${meta.statusColor}`}>
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <div className="font-medium">{feature.name}</div>
+                              <div className="text-xs text-muted-foreground">{feature.description}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={feature.isEnabled ? 'default' : 'secondary'} className={feature.isEnabled ? 'bg-green-500 hover:bg-green-600' : ''}>
+                            {feature.isEnabled ? 'Active' : 'Disabled'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Shield className="h-3 w-3" />
+                            {meta.enforcement}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost" 
+                            size="sm"
+                            disabled={toggling === feature.key}
+                            onClick={() => toggleFeature(feature.key, feature.isEnabled)}
+                            className={feature.isEnabled ? "text-red-500 hover:text-red-600 hover:bg-red-50" : "text-green-500 hover:text-green-600 hover:bg-green-50"}
+                          >
+                            {toggling === feature.key ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : feature.isEnabled ? (
+                              "Disable"
+                            ) : (
+                              "Enable"
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      <div className="grid gap-4">
-        {features.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            No features configured. Click "Initialize Defaults" to create default features.
-          </div>
-        ) : (
-          features.map((feature) => (
-            <div
-              key={feature.id}
-              className="p-4 rounded-lg border bg-card flex items-center justify-between"
-            >
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => toggleFeature(feature.key, feature.isEnabled)}
-                  disabled={toggling === feature.key}
-                  className="focus:outline-none"
-                >
-                  {toggling === feature.key ? (
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  ) : feature.isEnabled ? (
-                    <ToggleRight className="h-8 w-8 text-green-500" />
-                  ) : (
-                    <ToggleLeft className="h-8 w-8 text-muted-foreground" />
-                  )}
-                </button>
-                <div>
-                  <h3 className="font-medium">{feature.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {feature.description || feature.key}
-                  </p>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Total Features</span>
+                <span className="font-medium">{features.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Active</span>
+                <span className="font-medium text-green-600">{features.filter(f => f.isEnabled).length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Disabled</span>
+                <span className="font-medium text-red-600">{features.filter(f => !f.isEnabled).length}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-muted/30">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                How it works
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground space-y-3">
+              <p>
+                <strong>Feature Toggles</strong> control the availability of AI capabilities across the platform.
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-1">
+                <li>Saved in database</li>
+                <li>Cached for 60s (requires fresh)</li>
+                <li>Enforced at API level</li>
+              </ul>
+              <div className="mt-4 p-3 bg-secondary rounded-md border text-xs">
+                <div className="font-semibold mb-1 flex items-center gap-1">
+                   <AlertTriangle className="h-3 w-3 text-orange-500" />
+                   Important
                 </div>
+                Disabling critical features like "Code Security Filter" may expose the system to risks (simulated mode).
               </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-xs px-2 py-1 rounded-full ${
-                    feature.isEnabled
-                      ? 'bg-green-500/20 text-green-600'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {feature.isEnabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="p-4 rounded-lg border bg-muted/30">
-        <h3 className="font-medium mb-2">Feature Descriptions</h3>
-        <ul className="text-sm text-muted-foreground space-y-1">
-          <li><strong>Smart Context:</strong> 자동으로 관련 코드 컨텍스트를 수집하여 프롬프트에 추가</li>
-          <li><strong>Auto Fix:</strong> 코드 오류 자동 수정 기능</li>
-          <li><strong>Patch Generation:</strong> 기존 코드와 diff 기반 패치 생성</li>
-          <li><strong>Inline Explain:</strong> 코드에 대한 설명 인라인 삽입</li>
-          <li><strong>Code Security Filter:</strong> 위험한 코드 패턴 차단</li>
-          <li><strong>Code Review:</strong> AI 기반 코드 리뷰 기능</li>
-        </ul>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

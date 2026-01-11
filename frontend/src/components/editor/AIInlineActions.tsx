@@ -4,12 +4,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, Wand2, Code, FileCode, Bug, MessageSquare, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { featureApi } from '@/lib/api';
 
 interface AIAction {
   id: string;
   label: string;
   icon: React.ElementType;
   action: () => void;
+  feature?: string | null;
 }
 
 interface AIInlineActionsProps {
@@ -38,7 +40,26 @@ export function AIInlineActions({
   className,
 }: AIInlineActionsProps) {
   const [copied, setCopied] = useState(false);
+  const [enabledFeatures, setEnabledFeatures] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadFeatures();
+  }, []);
+
+  const loadFeatures = async () => {
+    try {
+      const features = await featureApi.getEnabled();
+      setEnabledFeatures(features);
+    } catch (error) {
+      console.error('Failed to load enabled features', error);
+      // Fallback to all enabled or empty? 
+      // Safe default: Assume empty if error to prevent unauthorized usage, 
+      // or assume all enabled if it's just a network glitch?
+      // Given we are hard restricting in backend, we can be lenient or strict here.
+      // Let's assume empty to avoid "Feature disabled" errors from backend.
+    }
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -77,12 +98,14 @@ export function AIInlineActions({
   };
 
   const actions: AIAction[] = [
-    { id: 'explain', label: 'Explain', icon: MessageSquare, action: onExplain || (() => {}) },
-    { id: 'refactor', label: 'Refactor', icon: Wand2, action: onRefactor || (() => {}) },
-    { id: 'fix', label: 'Fix', icon: Bug, action: onFix || (() => {}) },
-    { id: 'document', label: 'Document', icon: FileCode, action: onDocument || (() => {}) },
-    { id: 'ask', label: 'Ask AI', icon: Sparkles, action: onAsk || (() => {}) },
+    { id: 'explain', label: 'Explain', icon: MessageSquare, action: onExplain || (() => {}), feature: 'inline_explain' },
+    { id: 'refactor', label: 'Refactor', icon: Wand2, action: onRefactor || (() => {}), feature: 'auto_fix' }, // Mapping Refactor to auto_fix for now
+    { id: 'fix', label: 'Fix', icon: Bug, action: onFix || (() => {}), feature: 'auto_fix' },
+    { id: 'document', label: 'Document', icon: FileCode, action: onDocument || (() => {}), feature: 'doc_gen' },
+    { id: 'ask', label: 'Ask AI', icon: Sparkles, action: onAsk || (() => {}), feature: null }, // Always available
   ];
+
+  const visibleActions = actions.filter(a => !a.feature || enabledFeatures.includes(a.feature));
 
   return (
     <div
@@ -101,7 +124,7 @@ export function AIInlineActions({
 
       {/* Actions */}
       <div className="p-1">
-        {actions.map((action) => {
+        {visibleActions.map((action) => {
           const Icon = action.icon;
           return (
             <button

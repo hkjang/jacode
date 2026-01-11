@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OllamaProvider } from './providers/ollama.provider';
 import { VLLMProvider } from './providers/vllm.provider';
 import { CircuitBreakerService } from './services/circuit-breaker.service';
+import { FeatureToggleService } from '../admin/services/feature-toggle.service';
 import { 
   ChatMessage, 
   ChatOptions, 
@@ -30,6 +31,7 @@ export class AIService {
     private readonly ollamaProvider: OllamaProvider,
     private readonly vllmProvider: VLLMProvider,
     private readonly circuitBreaker: CircuitBreakerService,
+    private readonly featureToggleService: FeatureToggleService,
   ) {
     this.activeProvider = this.configService.get<AIProviderType>('AI_PROVIDER', 'ollama');
   }
@@ -310,6 +312,12 @@ export class AIService {
     design?: any;
     validation?: any;
   }> {
+    if (await this.featureToggleService.isEnabled('code_security_filter')) {
+      if (prompt.toLowerCase().includes('rm -rf') || prompt.toLowerCase().includes('drop table')) {
+        throw new Error('Security Alert: Potentially dangerous code operation blocked by security filter.');
+      }
+    }
+
     // Use new prompt chain if project context is available
     if (options?.useChain !== false && options?.projectId && options?.filePath) {
       try {
@@ -408,6 +416,10 @@ Respond with the complete modified code wrapped in a code block, followed by a b
    * Review code and provide feedback
    */
   async reviewCode(code: string, language?: string): Promise<string> {
+    if (!(await this.featureToggleService.isEnabled('code_review'))) {
+      throw new Error('Feature Disabled: Code Review is currently disabled by administrator.');
+    }
+
     const systemPrompt = `You are an expert code reviewer. Analyze the provided code and give constructive feedback on:
 1. Code quality and readability
 2. Potential bugs or issues
