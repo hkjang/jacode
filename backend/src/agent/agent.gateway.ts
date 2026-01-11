@@ -136,4 +136,19 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`user:${userId}`).emit('artifact:created', artifact);
     this.server.to(`project:${projectId}`).emit('artifact:created', artifact);
   }
+
+  /**
+   * Send system notification (announcements, alerts)
+   */
+  sendSystemNotification(message: string, type: string = 'info', details?: any) {
+    // Broadcast to everyone (or specific room if we had a global room, but for now specific/project rooms)
+    // Actually we can emit to all connected clients if we want global announcement.
+    // server.emit broadcasts to all.
+    this.server.emit('notification', {
+      message,
+      type,
+      details,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

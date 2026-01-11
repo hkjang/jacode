@@ -53,16 +53,16 @@ export class SystemSettingsController {
     return this.service.updateQueueSettings(settings, req.user);
   }
 
-  @Get('model')
-  @ApiOperation({ summary: 'Get model settings' })
-  getModelSettings() {
-    return this.service.getModelSettings();
+  @Get('notification')
+  @ApiOperation({ summary: 'Get notification settings' })
+  getNotificationSettings() {
+    return this.service.getNotificationSettings();
   }
 
-  @Patch('model')
-  @ApiOperation({ summary: 'Update model settings' })
-  updateModelSettings(@Body() settings: Record<string, any>, @Request() req: any) {
-    return this.service.updateModelSettings(settings, req.user);
+  @Patch('notification')
+  @ApiOperation({ summary: 'Update notification settings' })
+  updateNotificationSettings(@Body() settings: Record<string, any>, @Request() req: any) {
+    return this.service.updateNotificationSettings(settings, req.user);
   }
 
   @Post('initialize')

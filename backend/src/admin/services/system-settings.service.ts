@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from './audit-log.service';
+import { AgentGateway } from '../../agent/agent.gateway';
 
 @Injectable()
 export class SystemSettingsService {
@@ -9,6 +10,7 @@ export class SystemSettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
+    private readonly gateway: AgentGateway,
   ) {}
 
   // ==================== Settings CRUD ====================
@@ -139,6 +141,15 @@ export class SystemSettingsService {
       { key: 'security.rateLimit', value: 100, category: 'security', description: '분당 API 요청 제한' },
       { key: 'security.codeFilter', value: true, category: 'security', description: '위험 코드 필터' },
       { key: 'security.maxPromptLength', value: 10000, category: 'security', description: '최대 프롬프트 길이' },
+
+      // Notification settings
+
+      { key: 'notification.enabled', value: true, category: 'notification', description: '시스템 알림 활성화' },
+      { key: 'notification.announcement', value: '', category: 'notification', description: '전체 공지사항 (비어있으면 표시 안함)' },
+      { key: 'notification.announcementType', value: 'info', category: 'notification', description: '공지사항 유형 (info, warning, error)' },
+      { key: 'notification.emailEnabled', value: false, category: 'notification', description: '이메일 알림 활성화' },
+      { key: 'notification.emailAddress', value: '', category: 'notification', description: '알림 수신 이메일' },
+      { key: 'notification.notifyOnPolicyChange', value: true, category: 'notification', description: '정책 변경 시 사용자 알림' },
     ];
 
     for (const setting of defaults) {
@@ -163,7 +174,15 @@ export class SystemSettingsService {
       key: `editor.${key}`,
       value,
     }));
-    return this.setMultiple(updates, 'editor', adminContext);
+    const result = await this.setMultiple(updates, 'editor', adminContext);
+
+    // Check if we should notify
+    const notifyEnabled = await this.get('notification.notifyOnPolicyChange');
+    if (notifyEnabled) {
+      this.gateway.sendSystemNotification('Editor Policy Updated', 'policy_update', settings);
+    }
+
+    return result;
   }
 
   // ==================== Queue Settings ====================
@@ -180,17 +199,26 @@ export class SystemSettingsService {
     return this.setMultiple(updates, 'queue', adminContext);
   }
 
-  // ==================== Model Settings ====================
+  // ==================== Notification Settings ====================
 
-  async getModelSettings() {
-    return this.getByCategory('model');
+  async getNotificationSettings() {
+    return this.getByCategory('notification');
   }
 
-  async updateModelSettings(settings: Record<string, any>, adminContext?: any) {
+  async updateNotificationSettings(settings: Record<string, any>, adminContext?: any) {
     const updates = Object.entries(settings).map(([key, value]) => ({
-      key: `model.${key}`,
+      key: `notification.${key}`,
       value,
     }));
-    return this.setMultiple(updates, 'model', adminContext);
+    
+    // Check for announcement
+    if (settings['announcement']) {
+      // Determine type from settings or default to info if not present in the update payload
+      // But typically we update both.
+      const type = settings['announcementType'] || 'info';
+      this.gateway.sendSystemNotification(settings['announcement'], 'announcement', { type });
+    }
+
+    return this.setMultiple(updates, 'notification', adminContext);
   }
 }

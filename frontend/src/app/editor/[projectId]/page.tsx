@@ -27,6 +27,10 @@ import { AgentPanel } from '@/components/agent/AgentPanel';
 import { VersionHistory } from '@/components/version/VersionHistory';
 import { useEditorStore } from '@/stores/editorStore';
 import { fileApi, projectApi } from '@/lib/api';
+import { SocketProvider, useSocket } from '@/providers/SocketProvider';
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+
+
 
 export default function EditorPage() {
   const params = useParams();
@@ -207,7 +211,8 @@ export default function EditorPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <SocketProvider>
+      <div className="h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="h-12 border-b bg-card flex items-center px-4 gap-4">
         <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')}>
@@ -243,6 +248,7 @@ export default function EditorPage() {
             <History className="h-4 w-4 mr-1" />
             History
           </Button>
+          <NotificationCenter />
         </div>
       </header>
 
@@ -371,5 +377,6 @@ export default function EditorPage() {
         </PanelGroup>
       </div>
     </div>
+    </SocketProvider>
   );
 }
