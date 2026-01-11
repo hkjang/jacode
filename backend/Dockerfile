@@ -7,6 +7,7 @@ FROM base AS build
 COPY . /usr/src/app
 WORKDIR /usr/src/app
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm --filter @jacode/backend exec prisma generate
 RUN pnpm run -r build
 RUN pnpm deploy --filter=@jacode/backend --prod /prod/backend
 
