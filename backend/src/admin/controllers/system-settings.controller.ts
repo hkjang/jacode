@@ -6,6 +6,7 @@ import {
   Query,
   Body,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -36,8 +37,8 @@ export class SystemSettingsController {
 
   @Patch('editor')
   @ApiOperation({ summary: 'Update editor policy' })
-  updateEditorPolicy(@Body() settings: Record<string, any>) {
-    return this.service.updateEditorPolicy(settings);
+  updateEditorPolicy(@Body() settings: Record<string, any>, @Request() req) {
+    return this.service.updateEditorPolicy(settings, req.user);
   }
 
   @Get('queue')
@@ -48,8 +49,8 @@ export class SystemSettingsController {
 
   @Patch('queue')
   @ApiOperation({ summary: 'Update queue settings' })
-  updateQueueSettings(@Body() settings: Record<string, any>) {
-    return this.service.updateQueueSettings(settings);
+  updateQueueSettings(@Body() settings: Record<string, any>, @Request() req) {
+    return this.service.updateQueueSettings(settings, req.user);
   }
 
   @Get('model')
@@ -60,8 +61,8 @@ export class SystemSettingsController {
 
   @Patch('model')
   @ApiOperation({ summary: 'Update model settings' })
-  updateModelSettings(@Body() settings: Record<string, any>) {
-    return this.service.updateModelSettings(settings);
+  updateModelSettings(@Body() settings: Record<string, any>, @Request() req) {
+    return this.service.updateModelSettings(settings, req.user);
   }
 
   @Post('initialize')

@@ -29,6 +29,7 @@ export class AuditController {
     @Query('adminId') adminId?: string,
     @Query('action') action?: string,
     @Query('resource') resource?: string,
+    @Query('search') search?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page') page?: string,
@@ -38,12 +39,13 @@ export class AuditController {
       adminId,
       action,
       resource,
+      search,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
     });
-  }
+  });
 
   @Get('logs/resource')
   @ApiOperation({ summary: 'Get audit logs for a specific resource' })

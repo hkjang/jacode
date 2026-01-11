@@ -83,17 +83,28 @@ export class AuditLogService {
     adminId?: string;
     action?: string;
     resource?: string;
+    search?: string;
     startDate?: Date;
     endDate?: Date;
     page?: number;
     limit?: number;
   }) {
-    const { adminId, action, resource, startDate, endDate, page = 1, limit = 50 } = filters;
+    const { adminId, action, resource, search, startDate, endDate, page = 1, limit = 50 } = filters;
 
     const where: any = {};
     if (adminId) where.adminId = adminId;
     if (action) where.action = action;
     if (resource) where.resource = resource;
+    
+    if (search) {
+      where.OR = [
+        { adminName: { contains: search, mode: 'insensitive' } },
+        { adminEmail: { contains: search, mode: 'insensitive' } },
+        { resource: { contains: search, mode: 'insensitive' } },
+        { resourceId: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = startDate;

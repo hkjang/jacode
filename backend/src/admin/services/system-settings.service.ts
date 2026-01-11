@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditLogService } from './audit-log.service';
 
 @Injectable()
 export class SystemSettingsService {
   private readonly logger = new Logger(SystemSettingsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   // ==================== Settings CRUD ====================
 
@@ -23,12 +27,29 @@ export class SystemSettingsService {
     return setting?.value;
   }
 
-  async set(key: string, value: any, options?: { description?: string; category?: string }) {
-    return this.prisma.systemSetting.upsert({
+  async set(
+    key: string,
+    value: any,
+    options?: { description?: string; category?: string },
+    adminContext?: { id: string; email: string; name: string },
+  ) {
+    const output = await this.prisma.systemSetting.upsert({
       where: { key },
       update: { value, ...options },
       create: { key, value, ...options },
     });
+
+    if (adminContext) {
+      await this.auditLogService.logUpdate(
+        adminContext,
+        'settings',
+        key,
+        null, // We don't have the old value easily available without an extra query, but that's acceptable for now or we can fetch it.
+        value,
+      );
+    }
+
+    return output;
   }
 
   async delete(key: string) {
@@ -50,8 +71,18 @@ export class SystemSettingsService {
     }, {} as Record<string, any>);
   }
 
-  async setMultiple(settings: { key: string; value: any }[], category?: string) {
-    return this.prisma.$transaction(
+  async setMultiple(
+    settings: { key: string; value: any }[],
+    category?: string,
+    adminContext?: { id: string; email: string; name: string },
+  ) {
+    // Fetch old values for audit logging logic if we want perfect "before" state
+    // For simplicity, we'll log the batch update.
+    
+    // Better strategy: Log each change or log the batch.
+    // Let's do a transaction.
+    
+    const result = await this.prisma.$transaction(
       settings.map((s) =>
         this.prisma.systemSetting.upsert({
           where: { key: s.key },
@@ -60,6 +91,24 @@ export class SystemSettingsService {
         })
       )
     );
+
+    if (adminContext) {
+      // Log the batch update
+      // Since it's multiple keys, we can iterate and log or log as a "bulk" operation.
+      // The AuditLogService is per-resource usually.
+      // Let's log each one for clarity in the log viewer so we can see exactly what changed.
+      for (const s of settings) {
+         await this.auditLogService.logUpdate(
+          adminContext,
+          'settings',
+          s.key,
+          null, // undefined before state
+          s.value,
+        );
+      }
+    }
+
+    return result;
   }
 
   // ==================== Default Settings ====================
@@ -109,12 +158,12 @@ export class SystemSettingsService {
     return this.getByCategory('editor');
   }
 
-  async updateEditorPolicy(settings: Record<string, any>) {
+  async updateEditorPolicy(settings: Record<string, any>, adminContext?: any) {
     const updates = Object.entries(settings).map(([key, value]) => ({
       key: `editor.${key}`,
       value,
     }));
-    return this.setMultiple(updates, 'editor');
+    return this.setMultiple(updates, 'editor', adminContext);
   }
 
   // ==================== Queue Settings ====================
@@ -123,12 +172,12 @@ export class SystemSettingsService {
     return this.getByCategory('queue');
   }
 
-  async updateQueueSettings(settings: Record<string, any>) {
+  async updateQueueSettings(settings: Record<string, any>, adminContext?: any) {
     const updates = Object.entries(settings).map(([key, value]) => ({
       key: `queue.${key}`,
       value,
     }));
-    return this.setMultiple(updates, 'queue');
+    return this.setMultiple(updates, 'queue', adminContext);
   }
 
   // ==================== Model Settings ====================
@@ -137,11 +186,11 @@ export class SystemSettingsService {
     return this.getByCategory('model');
   }
 
-  async updateModelSettings(settings: Record<string, any>) {
+  async updateModelSettings(settings: Record<string, any>, adminContext?: any) {
     const updates = Object.entries(settings).map(([key, value]) => ({
       key: `model.${key}`,
       value,
     }));
-    return this.setMultiple(updates, 'model');
+    return this.setMultiple(updates, 'model', adminContext);
   }
 }
