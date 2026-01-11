@@ -23,6 +23,7 @@ import {
   Database,
   ListTodo,
   MessageSquare,
+  FolderOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LanguageSelector, useI18n } from '@/contexts/I18nContext';
@@ -59,6 +60,7 @@ const navSections = [
     title: '사용자 & 권한',
     items: [
       { href: '/admin/users', label: '사용자 관리', icon: Users },
+      { href: '/admin/projects', label: '프로젝트 관리', icon: FolderOpen },
       { href: '/admin/features', label: '기능 토글', icon: Zap },
     ]
   },

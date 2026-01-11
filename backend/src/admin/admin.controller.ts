@@ -3,9 +3,13 @@ import {
   Get,
   Post,
   Patch,
+  Post,
+  Put,
+  Patch,
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -114,6 +118,116 @@ export class AdminController {
         nodeVersion: process.version,
       },
     };
+  }
+
+  @Get('projects')
+  @ApiOperation({ summary: 'Get all projects (Admin)' })
+  async getProjects(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('search') search = '',
+    @Query('sortBy') sortBy = 'updatedAt',
+    @Query('order') order = 'desc',
+  ) {
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const skip = (pageNum - 1) * limitNum;
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const orderBy: any = {};
+    if (sortBy === 'fileCount') {
+      orderBy.files = { _count: order };
+    } else if (sortBy === 'taskCount') {
+      orderBy.agentTasks = { _count: order };
+    } else if (sortBy === 'user') {
+      orderBy.user = { name: order };
+    } else {
+      orderBy[sortBy] = order;
+    }
+
+    const [projects, total] = await Promise.all([
+      this.prisma.project.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy,
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+          _count: { select: { files: true, agentTasks: true } },
+        },
+      }),
+      this.prisma.project.count({ where }),
+    ]);
+
+    return {
+      data: projects,
+      meta: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    };
+  }
+
+      },
+    };
+  }
+
+  @Get('projects/:id')
+  @ApiOperation({ summary: 'Get a single project details (Admin)' })
+  async getProject(@Param('id') id: string) {
+    return this.prisma.project.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+        files: { select: { id: true, name: true, path: true, updatedAt: true } },
+        agentTasks: { select: { id: true, description: true, status: true, createdAt: true } },
+      },
+    });
+  }
+
+      },
+    });
+  }
+
+  @Patch('projects/:id')
+  @ApiOperation({ summary: 'Update a project (Admin)' })
+  async updateProject(
+    @Param('id') id: string,
+    @Body() body: { name?: string; description?: string },
+  ) {
+    return this.prisma.project.update({
+      where: { id },
+      data: body,
+    });
+  }
+
+  @Delete('projects/bulk')
+  @ApiOperation({ summary: 'Bulk delete projects (Admin)' })
+  async bulkDeleteProjects(@Body() body: { ids: string[] }) {
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+        return { count: 0 };
+    }
+    return this.prisma.project.deleteMany({
+      where: { id: { in: body.ids } },
+    });
+  }
+
+  @Delete('projects/:id')
+  @ApiOperation({ summary: 'Delete a project (Admin)' })
+  async deleteProject(@Param('id') id: string) {
+    return this.prisma.project.delete({
+      where: { id },
+    });
   }
 
   @Get('users')
