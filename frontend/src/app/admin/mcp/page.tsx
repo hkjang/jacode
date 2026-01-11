@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/api";
 
 interface McpTool {
   name: string;
@@ -31,7 +32,7 @@ export default function McpToolsPage() {
   const fetchTools = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:4000/admin/mcp/tools', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/mcp/tools`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -205,7 +206,7 @@ function Playground({ tools }: { tools: McpTool[] }) {
         try {
             const parsedArgs = JSON.parse(args);
             const token = localStorage.getItem('accessToken');
-            const response = await fetch('http://localhost:4000/admin/mcp/execute', {
+            const response = await fetch(`${API_BASE_URL}/api/admin/mcp/execute`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -230,7 +231,7 @@ function Playground({ tools }: { tools: McpTool[] }) {
         if (!selectedTool) return;
         try {
             const token = localStorage.getItem('accessToken');
-            const response = await fetch('http://localhost:4000/admin/mcp/reset-circuit', {
+            const response = await fetch(`${API_BASE_URL}/api/admin/mcp/reset-circuit`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -346,7 +347,7 @@ function LogsTable() {
   const fetchLogs = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:4000/api/admin/audit/logs?action=MCP_TOOL_EXECUTE&limit=20', {
+      const response = await fetch(`${API_BASE_URL}/api/admin/audit/logs?action=MCP_TOOL_EXECUTE&limit=20`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

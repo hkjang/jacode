@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: jacode-postgres
+    environment:
+      POSTGRES_USER: jacode
+      POSTGRES_PASSWORD: jacode
+      POSTGRES_DB: jacode
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U jacode" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jacode-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: jacode-redis
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jacode-network
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: jacode-backend:latest
+    container_name: jacode-backend
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://jacode:jacode@postgres:5432/jacode?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BACKEND_PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-secret}
+      JWT_EXPIRES_IN: 7d
+      ALLOWED_ORIGINS: https://jacode.koreacb.com,http://localhost:3000
+    ports:
+      - "4000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - jacode-network
+
+  # Frontend App
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: jacode-frontend:latest
+    container_name: jacode-frontend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://jacode.koreacb.com
+      BACKEND_URL: http://backend:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - jacode-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  jacode-network:
+    driver: bridge

@@ -4,7 +4,7 @@ import { McpHostService } from '../services/mcp-host.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CircuitBreakerService } from '../../ai/services/circuit-breaker.service';
 
-@Controller('admin/mcp')
+@Controller('api/admin/mcp')
 export class McpController {
   constructor(
     private readonly toolRegistry: ToolRegistryService,

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2, FilePlus, FileMinus, Copy, Download, RefreshCw, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { aiApi, api } from '@/lib/api';
+import { aiApi, api, API_BASE_URL } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AICodeBlock, DiffPreviewModal } from './AICodeBlock';
@@ -419,8 +419,7 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
       abortControllerRef.current = new AbortController();
       setIsStreaming(true);
       
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
+      const response = await fetch(`${API_BASE_URL}/api/ai/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -520,7 +519,7 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: `⚠️ Error: ${errorDetail}\n\nPlease check:\n- Is Ollama running at \`http://localhost:11434\`?\n- Is the backend server running?`,
+          content: `⚠️ Error: ${errorDetail}\n\nPlease check:\n- Is the AI Provider (Ollama/vLLM) running?\n- Is the backend server running?`,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
