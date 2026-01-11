@@ -30,9 +30,8 @@ import { fileApi, projectApi } from '@/lib/api';
 import { SocketProvider, useSocket } from '@/providers/SocketProvider';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
-
-
-export default function EditorPage() {
+// Inner component that uses socket
+function EditorContent() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.projectId as string;
@@ -59,7 +58,6 @@ export default function EditorPage() {
 
   const [projectName, setProjectName] = useState('');
   const [loading, setLoading] = useState(true);
-  // showAI and showAgents are now in editorStore
   const [showHistory, setShowHistory] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -72,7 +70,7 @@ export default function EditorPage() {
       return;
     }
     loadProject();
-    loadEditorSettings(); // Load system settings
+    loadEditorSettings();
   }, [projectId]);
 
   // Listen for policy updates
@@ -81,12 +79,11 @@ export default function EditorPage() {
     if (!socket) return;
     const handleEvent = (data: any) => {
        if (data.type === 'policy_update') {
-          // Toast is handled by NotificationCenter, we just reload settings
           loadEditorSettings();
        }
     };
     socket.on('notification', handleEvent);
-    return () => socket.off('notification', handleEvent);
+    return () => { socket.off('notification', handleEvent); };
   }, [socket, loadEditorSettings]);
 
   const loadProject = async () => {
@@ -168,29 +165,22 @@ export default function EditorPage() {
     try {
       const response = await fileApi.download(projectId, node.id);
       
-      // Create blob link to download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      // Use filename from node or header if possible, here using node.name
       link.setAttribute('download', node.name);
       document.body.appendChild(link);
       link.click();
       
-      // Cleanup
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download file:', error);
-      // Optional: Add toast error here
     }
   };
 
   const handleMoveFile = async (source: FileTreeNode, target: FileTreeNode) => {
     try {
-      // Find full source node from tree if needed, but we used ID in source
-      // Actually we need source name to construct new path
-      // Let's find the source node in fileTree
       const findNode = (nodes: FileTreeNode[], id: string): FileTreeNode | undefined => {
         for (const node of nodes) {
           if (node.id === id) return node;
@@ -207,7 +197,6 @@ export default function EditorPage() {
 
       const newPath = `${target.path}/${sourceNode.name}`;
       
-      // Check if moving to same parent
       const currentParent = sourceNode.path.split('/').slice(0, -1).join('/');
       if (currentParent === target.path) return;
 
@@ -228,8 +217,7 @@ export default function EditorPage() {
   }
 
   return (
-    <SocketProvider>
-      <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="h-12 border-b bg-card flex items-center px-4 gap-4">
         <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')}>
@@ -334,9 +322,6 @@ export default function EditorPage() {
                       wordWrap: editorSettings?.wordWrap as any,
                       minimap: { enabled: editorSettings?.minimap },
                       quickSuggestions: editorSettings?.autoComplete,
-                      // Theme is handled globally but we can enforce it if needed, 
-                      // but MonacoEditor handles theme via next-themes.
-                      // If we want to support 'editor.theme' from settings, we need to map it or pass it.
                     }}
                   />
                 ) : (
@@ -367,7 +352,6 @@ export default function EditorPage() {
                       } else if (mode === 'append') {
                         updateFileContent(activeFile.id, activeFile.content + '\n' + code);
                       }
-                      // Auto-save after applying AI code
                       handleSaveFile(mode === 'replace' ? code : activeFile.content + '\n' + code);
                     }
                   }}
@@ -404,6 +388,14 @@ export default function EditorPage() {
         </PanelGroup>
       </div>
     </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <SocketProvider>
+      <EditorContent />
     </SocketProvider>
   );
 }
+

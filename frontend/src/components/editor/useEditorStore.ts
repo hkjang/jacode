@@ -170,7 +170,11 @@ export const useEditorStore = create<EditorState>()(
     }),
     {
       name: 'editor-store',
-      partials: ['settings', 'recentFiles', 'sidebarCollapsed'],
+      partialize: (state) => ({
+        settings: state.settings,
+        recentFiles: state.recentFiles,
+        sidebarCollapsed: state.sidebarCollapsed,
+      }),
     }
   )
 );

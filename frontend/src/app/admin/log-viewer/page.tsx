@@ -242,9 +242,9 @@ export default function LogViewerPage() {
       case 'FATAL':
         return <Badge variant="destructive">{level}</Badge>;
       case 'WARN':
-        return <Badge variant="warning" className="bg-yellow-500 text-white hover:bg-yellow-600">{level}</Badge>;
+        return <Badge variant="outline" className="bg-yellow-500 text-white hover:bg-yellow-600 border-yellow-500">{level}</Badge>;
       case 'INFO':
-        return <Badge variant="secondary" className="bg-blue-500 text-white hover:bg-blue-600">{level}</Badge>;
+        return <Badge variant="outline" className="bg-blue-500 text-white hover:bg-blue-600 border-blue-500">{level}</Badge>;
       case 'DEBUG':
         return <Badge variant="outline">{level}</Badge>;
       default:

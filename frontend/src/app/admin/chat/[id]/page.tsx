@@ -37,6 +37,36 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { AICodeBlock } from '@/components/ai/AICodeBlock';
 
+// Type definitions for chat session detail
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: string;
+  modelName?: string;
+  promptTokens: number;
+  completionTokens: number;
+  responseTimeMs: number;
+  codeApplied?: boolean;
+  appliedFilePath?: string;
+}
+
+interface ChatSessionDetail {
+  id: string;
+  title: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  project?: {
+    id: string;
+    name: string;
+  };
+  messages: ChatMessage[];
+}
+
 // Process User Content to extract Context Files
 const processUserContent = (content: string) => {
   const contextMarker = "Context Files:\n";

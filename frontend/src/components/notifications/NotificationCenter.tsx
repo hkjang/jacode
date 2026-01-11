@@ -107,7 +107,7 @@ export function NotificationCenter() {
         <div className="flex items-center justify-between p-4 border-b">
           <h4 className="font-semibold leading-none">Notifications</h4>
           {unreadCount > 0 && (
-            <Button variant="ghost" size="xs" onClick={markAllRead} className="text-xs h-6">
+            <Button variant="ghost" size="sm" onClick={markAllRead} className="text-xs h-6">
               Mark all read
             </Button>
           )}
