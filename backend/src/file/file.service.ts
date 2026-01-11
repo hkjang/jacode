@@ -300,7 +300,14 @@ export class FileService {
       pathMap.set(file.path, node);
 
       if (parentPath && pathMap.has(parentPath)) {
-        pathMap.get(parentPath).children.push(node);
+        const parent = pathMap.get(parentPath);
+        // Ensure parent has children array (it should be a directory)
+        if (parent.children) {
+          parent.children.push(node);
+        } else {
+          // Parent exists but isn't a directory - add to root instead
+          tree.push(node);
+        }
       } else {
         tree.push(node);
       }

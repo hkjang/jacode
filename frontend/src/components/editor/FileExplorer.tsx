@@ -21,6 +21,18 @@ import {
   FileText,
   Image,
   Sparkles,
+  Copy,
+  Clipboard,
+  ExternalLink,
+  Terminal,
+  FolderSearch,
+  FileDiff,
+  FileSymlink,
+  Eye,
+  EyeOff,
+  Pin,
+  PinOff,
+  Bookmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -30,6 +42,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  ContextMenuLabel,
 } from '@/components/ui/context-menu';
 
 export interface FileTreeNode {
@@ -52,7 +65,21 @@ interface FileExplorerProps {
   onUploadFile?: (file: File, parentPath?: string) => void;
   onDownloadFile?: (file: FileTreeNode) => void;
   onMoveFile?: (source: FileTreeNode, target: FileTreeNode) => void;
-  onAddToContext?: (file: FileTreeNode) => void; // Add file to AI context
+  onDuplicateFile?: (file: FileTreeNode) => void;
+  onAddToContext?: (file: FileTreeNode) => void;
+  onExplainFile?: (file: FileTreeNode) => void;
+  onGenerateTests?: (file: FileTreeNode) => void;
+  onOpenInTerminal?: (path: string) => void;
+  onRevealInExplorer?: (path: string) => void;
+  onFindInFolder?: (path: string) => void;
+  onCompareFiles?: (file: FileTreeNode) => void;
+  onOpenToSide?: (file: FileTreeNode) => void;
+  onPinFile?: (file: FileTreeNode) => void;
+  onUnpinFile?: (file: FileTreeNode) => void;
+  onAddToFavorites?: (file: FileTreeNode) => void;
+  onRemoveFromFavorites?: (file: FileTreeNode) => void;
+  pinnedPaths?: string[];
+  favoritePaths?: string[];
   className?: string;
 }
 
@@ -99,7 +126,21 @@ interface TreeNodeProps {
   onUploadFile?: (file: File, parentPath?: string) => void;
   onDownloadFile?: (file: FileTreeNode) => void;
   onMoveFile?: (source: FileTreeNode, target: FileTreeNode) => void;
+  onDuplicateFile?: (file: FileTreeNode) => void;
   onAddToContext?: (file: FileTreeNode) => void;
+  onExplainFile?: (file: FileTreeNode) => void;
+  onGenerateTests?: (file: FileTreeNode) => void;
+  onOpenInTerminal?: (path: string) => void;
+  onRevealInExplorer?: (path: string) => void;
+  onFindInFolder?: (path: string) => void;
+  onCompareFiles?: (file: FileTreeNode) => void;
+  onOpenToSide?: (file: FileTreeNode) => void;
+  onPinFile?: (file: FileTreeNode) => void;
+  onUnpinFile?: (file: FileTreeNode) => void;
+  onAddToFavorites?: (file: FileTreeNode) => void;
+  onRemoveFromFavorites?: (file: FileTreeNode) => void;
+  isPinned?: boolean;
+  isFavorite?: boolean;
 }
 
 function TreeNode({
@@ -115,7 +156,21 @@ function TreeNode({
   onUploadFile,
   onDownloadFile,
   onMoveFile,
+  onDuplicateFile,
   onAddToContext,
+  onExplainFile,
+  onGenerateTests,
+  onOpenInTerminal,
+  onRevealInExplorer,
+  onFindInFolder,
+  onCompareFiles,
+  onOpenToSide,
+  onPinFile,
+  onUnpinFile,
+  onAddToFavorites,
+  onRemoveFromFavorites,
+  isPinned,
+  isFavorite,
 }: TreeNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(node.name);
@@ -258,17 +313,22 @@ function TreeNode({
           </div>
         </ContextMenuTrigger>
 
-        <ContextMenuContent>
+        <ContextMenuContent className="w-56">
+          {/* Create Section - Folders only */}
           {node.isDirectory && (
             <>
+              <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal">
+                Create
+              </ContextMenuLabel>
               <ContextMenuItem
                 onClick={() => {
                   const name = prompt('Enter file name:');
                   if (name && onCreateFile) onCreateFile(node.path, name, false);
                 }}
               >
-                <File className="h-4 w-4 mr-2" />
+                <File className="h-4 w-4 mr-2 text-blue-500" />
                 New File
+                <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+N</span>
               </ContextMenuItem>
               <ContextMenuItem
                 onClick={() => {
@@ -276,49 +336,200 @@ function TreeNode({
                   if (name && onCreateFile) onCreateFile(node.path, name, true);
                 }}
               >
-                <Folder className="h-4 w-4 mr-2" />
+                <Folder className="h-4 w-4 mr-2 text-yellow-500" />
                 New Folder
               </ContextMenuItem>
               <ContextMenuSeparator />
             </>
           )}
+
+          {/* Open Actions */}
+          <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal">
+            Open
+          </ContextMenuLabel>
+          {!node.isDirectory && (
+            <ContextMenuItem onClick={() => onSelectFile(node)}>
+              <Eye className="h-4 w-4 mr-2" />
+              Open
+              <span className="ml-auto text-[10px] text-muted-foreground">Enter</span>
+            </ContextMenuItem>
+          )}
+          {!node.isDirectory && onOpenToSide && (
+            <ContextMenuItem onClick={() => onOpenToSide(node)}>
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open to the Side
+              <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+Enter</span>
+            </ContextMenuItem>
+          )}
+          {node.isDirectory && (
+            <ContextMenuItem onClick={() => onRevealInExplorer?.(node.path)}>
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Reveal in File Explorer
+            </ContextMenuItem>
+          )}
+          {onOpenInTerminal && (
+            <ContextMenuItem onClick={() => {
+              const termPath = node.isDirectory ? node.path : node.path.substring(0, node.path.lastIndexOf('/'));
+              onOpenInTerminal(termPath);
+            }}>
+              <Terminal className="h-4 w-4 mr-2 text-green-500" />
+              Open in Terminal
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
+
+          {/* Edit Actions */}
+          <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal">
+            Edit
+          </ContextMenuLabel>
           <ContextMenuItem onClick={() => setIsEditing(true)}>
             <Edit2 className="h-4 w-4 mr-2" />
             Rename
+            <span className="ml-auto text-[10px] text-muted-foreground">F2</span>
           </ContextMenuItem>
+          {!node.isDirectory && onDuplicateFile && (
+            <ContextMenuItem onClick={() => onDuplicateFile(node)}>
+              <FileSymlink className="h-4 w-4 mr-2" />
+              Duplicate
+            </ContextMenuItem>
+          )}
           <ContextMenuItem
             className="text-destructive"
             onClick={() => {
-              if (confirm(`Delete ${node.name}?`) && onDeleteFile) {
-                onDeleteFile(node);
+              if (confirm(`Are you sure you want to delete "${node.name}"?`)) {
+                onDeleteFile?.(node);
               }
             }}
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
+            <span className="ml-auto text-[10px] text-muted-foreground">Del</span>
           </ContextMenuItem>
-          {!node.isDirectory && onDownloadFile && (
+          <ContextMenuSeparator />
+
+          {/* Copy Actions */}
+          <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal">
+            Copy
+          </ContextMenuLabel>
+          <ContextMenuItem onClick={() => {
+            navigator.clipboard.writeText(node.path);
+          }}>
+            <Clipboard className="h-4 w-4 mr-2" />
+            Copy Path
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            // Get relative path
+            const relativePath = node.path.split('/').slice(-2).join('/');
+            navigator.clipboard.writeText(relativePath);
+          }}>
+            <Copy className="h-4 w-4 mr-2" />
+            Copy Relative Path
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            navigator.clipboard.writeText(node.name);
+          }}>
+            <FileText className="h-4 w-4 mr-2" />
+            Copy Name
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+
+          {/* File Actions */}
+          {!node.isDirectory && (
             <>
+              <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal">
+                Actions
+              </ContextMenuLabel>
+              {onDownloadFile && (
+                <ContextMenuItem onClick={() => onDownloadFile(node)}>
+                  <Download className="h-4 w-4 mr-2 text-blue-500" />
+                  Download
+                </ContextMenuItem>
+              )}
+              {onCompareFiles && (
+                <ContextMenuItem onClick={() => onCompareFiles(node)}>
+                  <FileDiff className="h-4 w-4 mr-2 text-orange-500" />
+                  Compare with...
+                </ContextMenuItem>
+              )}
               <ContextMenuSeparator />
-              <ContextMenuItem
-                onClick={() => onDownloadFile(node)}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </ContextMenuItem>
             </>
           )}
+
+          {/* Folder Actions */}
+          {node.isDirectory && (
+            <>
+              <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal">
+                Search
+              </ContextMenuLabel>
+              <ContextMenuItem onClick={() => onFindInFolder?.(node.path)}>
+                <FolderSearch className="h-4 w-4 mr-2 text-blue-500" />
+                Find in Folder...
+                <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+Shift+F</span>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
+          
+          {/* AI Section */}
           {!node.isDirectory && onAddToContext && (
             <>
-              <ContextMenuSeparator />
+              <ContextMenuLabel className="text-[10px] text-muted-foreground font-normal flex items-center gap-1">
+                <Sparkles className="h-3 w-3 text-purple-500" />
+                AI
+              </ContextMenuLabel>
               <ContextMenuItem
                 onClick={() => onAddToContext(node)}
-                className="text-purple-600"
+                className="text-purple-600 dark:text-purple-400"
               >
                 <Sparkles className="h-4 w-4 mr-2" />
                 Add to AI Context
               </ContextMenuItem>
+              {onExplainFile && (
+                <ContextMenuItem onClick={() => onExplainFile(node)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Explain This File
+                </ContextMenuItem>
+              )}
+              {onGenerateTests && (
+                <ContextMenuItem onClick={() => onGenerateTests(node)}>
+                  <FileCode className="h-4 w-4 mr-2" />
+                  Generate Tests
+                </ContextMenuItem>
+              )}
+              <ContextMenuSeparator />
             </>
+          )}
+
+          {/* Bookmarks */}
+          {isPinned ? (
+            onUnpinFile && (
+              <ContextMenuItem onClick={() => onUnpinFile(node)}>
+                <PinOff className="h-4 w-4 mr-2 text-muted-foreground" />
+                Unpin
+              </ContextMenuItem>
+            )
+          ) : (
+            onPinFile && (
+              <ContextMenuItem onClick={() => onPinFile(node)}>
+                <Pin className="h-4 w-4 mr-2 text-yellow-500" />
+                Pin to Top
+              </ContextMenuItem>
+            )
+          )}
+          {isFavorite ? (
+            onRemoveFromFavorites && (
+              <ContextMenuItem onClick={() => onRemoveFromFavorites(node)}>
+                <Bookmark className="h-4 w-4 mr-2 fill-orange-500 text-orange-500" />
+                Remove from Favorites
+              </ContextMenuItem>
+            )
+          ) : (
+            onAddToFavorites && (
+              <ContextMenuItem onClick={() => onAddToFavorites(node)}>
+                <Bookmark className="h-4 w-4 mr-2 text-orange-500" />
+                Add to Favorites
+              </ContextMenuItem>
+            )
           )}
         </ContextMenuContent>
       </ContextMenu>
@@ -341,7 +552,21 @@ function TreeNode({
               onUploadFile={onUploadFile}
               onDownloadFile={onDownloadFile}
               onMoveFile={onMoveFile}
+              onDuplicateFile={onDuplicateFile}
               onAddToContext={onAddToContext}
+              onExplainFile={onExplainFile}
+              onGenerateTests={onGenerateTests}
+              onOpenInTerminal={onOpenInTerminal}
+              onRevealInExplorer={onRevealInExplorer}
+              onFindInFolder={onFindInFolder}
+              onCompareFiles={onCompareFiles}
+              onOpenToSide={onOpenToSide}
+              onPinFile={onPinFile}
+              onUnpinFile={onUnpinFile}
+              onAddToFavorites={onAddToFavorites}
+              onRemoveFromFavorites={onRemoveFromFavorites}
+              isPinned={isPinned}
+              isFavorite={isFavorite}
             />
           ))}
         </div>
@@ -360,7 +585,21 @@ export function FileExplorer({
   onUploadFile,
   onDownloadFile,
   onMoveFile,
+  onDuplicateFile,
   onAddToContext,
+  onExplainFile,
+  onGenerateTests,
+  onOpenInTerminal,
+  onRevealInExplorer,
+  onFindInFolder,
+  onCompareFiles,
+  onOpenToSide,
+  onPinFile,
+  onUnpinFile,
+  onAddToFavorites,
+  onRemoveFromFavorites,
+  pinnedPaths = [],
+  favoritePaths = [],
   className,
 }: FileExplorerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
@@ -547,7 +786,21 @@ export function FileExplorer({
               onUploadFile={onUploadFile}
               onDownloadFile={onDownloadFile}
               onMoveFile={onMoveFile}
+              onDuplicateFile={onDuplicateFile}
               onAddToContext={onAddToContext}
+              onExplainFile={onExplainFile}
+              onGenerateTests={onGenerateTests}
+              onOpenInTerminal={onOpenInTerminal}
+              onRevealInExplorer={onRevealInExplorer}
+              onFindInFolder={onFindInFolder}
+              onCompareFiles={onCompareFiles}
+              onOpenToSide={onOpenToSide}
+              onPinFile={onPinFile}
+              onUnpinFile={onUnpinFile}
+              onAddToFavorites={onAddToFavorites}
+              onRemoveFromFavorites={onRemoveFromFavorites}
+              isPinned={pinnedPaths.includes(file.path)}
+              isFavorite={favoritePaths.includes(file.path)}
             />
           ))
         )}
