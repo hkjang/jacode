@@ -69,10 +69,14 @@ export class AIService {
   /**
    * Get current provider info
    */
-  getProviderInfo() {
+  /**
+   * Get current provider info
+   */
+  async getProviderInfo() {
+    const info = await this.getProvider().getInfo();
     return {
       provider: this.activeProvider,
-      ...this.getProvider().getInfo(),
+      ...info,
     };
   }
 
@@ -643,7 +647,7 @@ Format the response in Markdown.`;
     
     try {
       // vLLM
-      const vllmInfo = this.vllmProvider.getInfo();
+      const vllmInfo = await this.vllmProvider.getInfo();
       if (vllmInfo.isAvailable) {
         const vllmModels = await this.vllmProvider.listModels();
         for (const modelName of vllmModels.models) {

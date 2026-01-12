@@ -96,6 +96,8 @@ export class AIController {
   @Post('chat/stream')
   @ApiOperation({ summary: 'Streaming chat completion' })
   async chatStream(@Body() dto: ChatDto, @Res() res: Response, @Request() req: any) {
+    // Explicitly set status 200 for SSE
+    res.status(HttpStatus.OK);
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -116,7 +118,9 @@ export class AIController {
       
       res.write(`data: [DONE]\n\n`);
     } catch (error) {
-      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      console.error('Chat Stream Error:', error);
+      // Send error as SSE data event so frontend can handle it gracefully
+      res.write(`data: ${JSON.stringify({ error: error.message || 'Stream processing failed' })}\n\n`);
     }
 
     res.end();

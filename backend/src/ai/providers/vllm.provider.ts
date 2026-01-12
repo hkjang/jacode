@@ -1,15 +1,23 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ChatMessage, ChatOptions, ChatResponse, ChatStreamChunk } from '../types';
 
 @Injectable()
 export class VLLMProvider implements OnModuleInit {
-  private baseUrl: string;
+  private readonly logger = new Logger(VLLMProvider.name);
+  private fallbackBaseUrl: string;
   private defaultModel: string;
   private isAvailable = false;
+  private cachedServerUrl: string | null = null;
+  private cacheTime: number = 0;
+  private readonly CACHE_TTL_MS = 30000; // 30 seconds cache
 
-  constructor(private readonly configService: ConfigService) {
-    this.baseUrl = this.configService.get('VLLM_BASE_URL', 'http://localhost:8000');
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
+    this.fallbackBaseUrl = this.configService.get('VLLM_BASE_URL', 'http://localhost:8000');
     this.defaultModel = this.configService.get('VLLM_MODEL', 'codellama/CodeLlama-13b-Instruct-hf');
   }
 
@@ -17,23 +25,77 @@ export class VLLMProvider implements OnModuleInit {
     await this.checkAvailability();
   }
 
+  /**
+   * Get the active vLLM server URL from database, with caching
+   */
+  private async getActiveServerUrl(): Promise<string> {
+    const now = Date.now();
+    
+    // Return cached URL if still valid
+    if (this.cachedServerUrl && (now - this.cacheTime) < this.CACHE_TTL_MS) {
+      return this.cachedServerUrl;
+    }
+
+    try {
+      // Find an active vLLM server from the database
+      const server = await this.prisma.modelServer.findFirst({
+        where: {
+          type: 'VLLM',
+          isActive: true,
+          status: 'ONLINE',
+        },
+        orderBy: { routingWeight: 'desc' },
+      });
+
+      if (server?.url) {
+        this.cachedServerUrl = server.url;
+        this.cacheTime = now;
+        this.logger.debug(`Using vLLM server from DB: ${server.url}`);
+        return server.url;
+      }
+
+      // Fallback: try any active vLLM server regardless of status
+      const anyServer = await this.prisma.modelServer.findFirst({
+        where: {
+          type: 'VLLM',
+          isActive: true,
+        },
+        orderBy: { routingWeight: 'desc' },
+      });
+
+      if (anyServer?.url) {
+        this.cachedServerUrl = anyServer.url;
+        this.cacheTime = now;
+        this.logger.debug(`Using fallback vLLM server from DB: ${anyServer.url}`);
+        return anyServer.url;
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to get vLLM server from DB: ${error}`);
+    }
+
+    // Final fallback: use environment variable
+    this.logger.debug(`Using fallback vLLM URL from env: ${this.fallbackBaseUrl}`);
+    return this.fallbackBaseUrl;
+  }
+
   private async checkAvailability() {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/models`);
+      const baseUrl = await this.getActiveServerUrl();
+      const response = await fetch(`${baseUrl}/v1/models`);
       this.isAvailable = response.ok;
       if (this.isAvailable) {
-        console.log('✅ vLLM is available');
+        this.logger.log(`✅ vLLM is available at ${baseUrl}`);
       }
-    } catch {
-      console.warn('⚠️ vLLM is not available');
+    } catch (error) {
+      this.logger.warn(`⚠️ vLLM is not available: ${error}`);
       this.isAvailable = false;
     }
   }
 
-  getInfo() {
+  async getInfo() {
     return {
       name: 'vLLM',
-      baseUrl: this.baseUrl,
+      baseUrl: await this.getActiveServerUrl(),
       defaultModel: this.defaultModel,
       isAvailable: this.isAvailable,
     };
@@ -41,8 +103,9 @@ export class VLLMProvider implements OnModuleInit {
 
   async chat(messages: ChatMessage[], options?: Partial<ChatOptions>): Promise<ChatResponse> {
     const model = options?.model || this.defaultModel;
+    const baseUrl = await this.getActiveServerUrl();
 
-    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -81,13 +144,14 @@ export class VLLMProvider implements OnModuleInit {
     options?: Partial<ChatOptions>,
   ): AsyncGenerator<ChatStreamChunk> {
     const model = options?.model || this.defaultModel;
+    const baseUrl = await this.getActiveServerUrl();
 
     // Use AbortController for timeout (5 min max for long generations)
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 300000);
 
     try {
-      const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -182,7 +246,8 @@ export class VLLMProvider implements OnModuleInit {
 
   async listModels(): Promise<{ models: string[]; default: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/models`);
+      const baseUrl = await this.getActiveServerUrl();
+      const response = await fetch(`${baseUrl}/v1/models`);
       if (!response.ok) {
         return { models: [], default: this.defaultModel };
       }
