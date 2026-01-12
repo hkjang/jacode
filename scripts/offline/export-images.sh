@@ -64,7 +64,7 @@ docker-compose -f docker-compose.prod.yml exec -T backend node dist/prisma/seed.
 
 echo "✅ Deployment Complete!"
 echo "Backend: http://localhost:4000"
-echo "Frontend: http://localhost:3000"
+echo "Frontend: http://localhost:3006"
 EOF
 
 chmod +x $OUTPUT_DIR/install.sh
