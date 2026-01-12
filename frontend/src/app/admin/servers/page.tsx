@@ -17,6 +17,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Eye,
+  Edit,
+  Play,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -52,6 +55,14 @@ export default function ServersPage() {
   const [stats, setStats] = useState<any>(null);
   const [pullModel, setPullModel] = useState('');
   const [pulling, setPulling] = useState(false);
+  // Edit modal
+  const [editingServer, setEditingServer] = useState<ModelServer | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  // API test modal
+  const [showApiTestModal, setShowApiTestModal] = useState(false);
+  const [apiTestResult, setApiTestResult] = useState<any>(null);
+  const [apiTestLoading, setApiTestLoading] = useState(false);
+  const [apiTestPrompt, setApiTestPrompt] = useState('');
 
   useEffect(() => {
     loadServers();
@@ -287,16 +298,30 @@ export default function ServersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {server.type === 'OLLAMA' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => loadModels(server)}
-                      title="모델 관리"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  )}
+                  {/* Models - works for both OLLAMA and VLLM now */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => loadModels(server)}
+                    title="모델 보기"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  {/* API Test */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedServer(server);
+                      setApiTestResult(null);
+                      setApiTestPrompt('');
+                      setShowApiTestModal(true);
+                    }}
+                    title="API 테스트"
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                  {/* Health Check */}
                   <Button
                     size="sm"
                     variant="outline"
@@ -309,6 +334,18 @@ export default function ServersPage() {
                     ) : (
                       <RefreshCw className="h-4 w-4" />
                     )}
+                  </Button>
+                  {/* Edit */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingServer(server);
+                      setShowEditModal(true);
+                    }}
+                    title="수정"
+                  >
+                    <Edit className="h-4 w-4" />
                   </Button>
                   <Button
                     size="sm"
@@ -446,6 +483,126 @@ export default function ServersPage() {
 
             <div className="flex justify-end mt-4">
               <Button variant="outline" onClick={() => setShowModelsModal(false)}>
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Server Modal */}
+      {showEditModal && editingServer && (
+        <EditServerModal
+          server={editingServer}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingServer(null);
+          }}
+          onSuccess={() => {
+            setShowEditModal(false);
+            setEditingServer(null);
+            loadServers();
+          }}
+        />
+      )}
+
+      {/* API Test Modal */}
+      {showApiTestModal && selectedServer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg p-6 w-full max-w-lg border">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                OpenAI API 테스트 - {selectedServer.name}
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowApiTestModal(false)}>
+                ✕
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">테스트 프롬프트</label>
+                <textarea
+                  value={apiTestPrompt}
+                  onChange={(e) => setApiTestPrompt(e.target.value)}
+                  placeholder="Hello, respond with one word: working"
+                  className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-background"
+                />
+              </div>
+
+              <Button 
+                className="w-full"
+                onClick={async () => {
+                  setApiTestLoading(true);
+                  setApiTestResult(null);
+                  try {
+                    const res = await api.post(`/api/admin/servers/${selectedServer.id}/test-chat`, {
+                      prompt: apiTestPrompt || undefined
+                    });
+                    setApiTestResult(res.data);
+                  } catch (error: any) {
+                    setApiTestResult({ 
+                      success: false, 
+                      message: error.response?.data?.message || error.message 
+                    });
+                  } finally {
+                    setApiTestLoading(false);
+                  }
+                }}
+                disabled={apiTestLoading}
+              >
+                {apiTestLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    테스트 중...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    API 테스트 실행
+                  </>
+                )}
+              </Button>
+
+              {apiTestResult && (
+                <div className={`p-4 rounded-lg border ${
+                  apiTestResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {apiTestResult.success ? (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                    <span className={`font-medium ${
+                      apiTestResult.success ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      {apiTestResult.message}
+                    </span>
+                  </div>
+                  {apiTestResult.latency && (
+                    <p className="text-sm text-muted-foreground">
+                      응답 시간: {apiTestResult.latency}ms
+                    </p>
+                  )}
+                  {apiTestResult.model && (
+                    <p className="text-sm text-muted-foreground">
+                      모델: {apiTestResult.model}
+                    </p>
+                  )}
+                  {apiTestResult.response && (
+                    <div className="mt-2 p-2 bg-background rounded border">
+                      <p className="text-sm font-medium mb-1">응답:</p>
+                      <p className="text-sm whitespace-pre-wrap">{apiTestResult.response}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <Button variant="outline" onClick={() => setShowApiTestModal(false)}>
                 닫기
               </Button>
             </div>
@@ -604,3 +761,156 @@ function AddServerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   );
 }
 
+interface EditServerModalProps {
+  server: ModelServer;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function EditServerModal({ server, onClose, onSuccess }: EditServerModalProps) {
+  const [form, setForm] = useState({
+    name: server.name,
+    url: server.url,
+    maxTokens: server.maxTokens,
+    device: server.device,
+    routingWeight: server.routingWeight,
+    rateLimit: server.rateLimit,
+  });
+  const [loading, setLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTest = async () => {
+    setLoading(true);
+    try {
+      const res = await api.post('/api/admin/servers/test-connection', {
+        url: form.url,
+        type: server.type,
+      });
+      setTestResult(res.data);
+    } catch (error: any) {
+      setTestResult({ success: false, message: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.patch(`/api/admin/servers/${server.id}`, form);
+      onSuccess();
+    } catch (error) {
+      console.error('Failed to update server:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-card rounded-lg p-6 w-full max-w-md border">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Edit className="h-5 w-5" />
+          모델 서버 수정
+        </h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">서버 이름</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full px-3 py-2 rounded border bg-background"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">서버 타입</label>
+            <input
+              type="text"
+              value={server.type}
+              className="w-full px-3 py-2 rounded border bg-muted text-muted-foreground"
+              disabled
+            />
+            <p className="text-xs text-muted-foreground mt-1">서버 타입은 변경할 수 없습니다</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">URL</label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+                className="flex-1 px-3 py-2 rounded border bg-background"
+                required
+              />
+              <Button type="button" variant="outline" onClick={handleTest} disabled={loading}>
+                테스트
+              </Button>
+            </div>
+            {testResult && (
+              <p className={`text-sm mt-1 ${testResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                {testResult.message}
+              </p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Max Tokens</label>
+              <input
+                type="number"
+                value={form.maxTokens}
+                onChange={(e) => setForm({ ...form, maxTokens: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Device</label>
+              <select
+                value={form.device}
+                onChange={(e) => setForm({ ...form, device: e.target.value })}
+                className="w-full px-3 py-2 rounded border bg-background"
+              >
+                <option value="auto">Auto</option>
+                <option value="cuda">CUDA</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">라우팅 가중치</label>
+              <input
+                type="number"
+                value={form.routingWeight}
+                onChange={(e) => setForm({ ...form, routingWeight: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background"
+                min={0}
+                max={1000}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Rate Limit (/분)</label>
+              <input
+                type="number"
+                value={form.rateLimit}
+                onChange={(e) => setForm({ ...form, rateLimit: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 rounded border bg-background"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              취소
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              저장
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

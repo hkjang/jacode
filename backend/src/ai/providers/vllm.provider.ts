@@ -82,71 +82,101 @@ export class VLLMProvider implements OnModuleInit {
   ): AsyncGenerator<ChatStreamChunk> {
     const model = options?.model || this.defaultModel;
 
-    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
-        top_p: options?.topP ?? 0.9,
-        stop: options?.stop,
-        stream: true,
-        stream_options: { include_usage: true },
-      }),
-    });
+    // Use AbortController for timeout (5 min max for long generations)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 300000);
 
-    if (!response.ok) {
-      throw new Error(`vLLM API error: ${response.statusText}`);
-    }
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 4096,
+          top_p: options?.topP ?? 0.9,
+          stop: options?.stop,
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+        signal: controller.signal,
+      });
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('No response body');
-    }
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`vLLM API error (${response.status}): ${response.statusText}${errorBody ? ` - ${errorBody.substring(0, 200)}` : ''}`);
+      }
 
-    const decoder = new TextDecoder();
-    let buffer = '';
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body from vLLM server');
+      }
 
-    while (true) {
-      const { done, value } = await reader.read();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let lastUsage: any = undefined;
 
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (data === '[DONE]') {
-            return;
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta?.content || '';
-            const usage = parsed.usage ? {
-              promptTokens: parsed.usage.prompt_tokens,
-              completionTokens: parsed.usage.completion_tokens,
-              totalTokens: parsed.usage.total_tokens,
-            } : undefined;
-
+        if (done) {
+          // Emit final chunk with usage if available
+          if (lastUsage) {
             yield {
-              id: parsed.id || `vllm-${Date.now()}`,
-              content: delta,
-              done: false, // In vLLM/OpenAI, usage usually comes with a final chunk or separate chunk
-              usage,
+              id: `vllm-final-${Date.now()}`,
+              content: '',
+              done: true,
+              usage: lastUsage,
             };
-            
-            // If we got usage, it's usually the end, but let's loop until [DONE]
-          } catch (e) {
-            // Skip invalid JSON
+          }
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') {
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const choice = parsed.choices?.[0];
+              const delta = choice?.delta?.content || '';
+              const finishReason = choice?.finish_reason;
+              
+              // Capture usage from any chunk (vLLM sends it at the end)
+              if (parsed.usage) {
+                lastUsage = {
+                  promptTokens: parsed.usage.prompt_tokens,
+                  completionTokens: parsed.usage.completion_tokens,
+                  totalTokens: parsed.usage.total_tokens,
+                };
+              }
+
+              // Only yield if there's content or it's the finish signal
+              if (delta || finishReason) {
+                yield {
+                  id: parsed.id || `vllm-${Date.now()}`,
+                  content: delta,
+                  done: finishReason === 'stop' || finishReason === 'length',
+                  model: model,
+                  usage: parsed.usage ? lastUsage : undefined,
+                };
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+            }
           }
         }
       }
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

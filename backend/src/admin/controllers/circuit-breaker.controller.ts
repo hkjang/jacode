@@ -8,29 +8,41 @@ export class CircuitBreakerController {
   constructor(private readonly circuitBreakerService: CircuitBreakerService) {}
 
   /**
-   * Get all circuit breakers
+   * Get all circuit breakers (including known circuits)
    */
   @Get()
   async getAll() {
     const states = this.circuitBreakerService.getAllStates();
     const result: any[] = [];
     
-    // Add known important circuits if they don't exist yet (for visibility)
-    // In a real app, these might be discovered dynamically or from config
-    const knownCircuits = ['ollama-primary', 'vllm-backup'];
-    for (const id of knownCircuits) {
-      if (!states.has(id)) {
-        // Just to show them in the list even if not triggered yet
-        // The service will create them on demand, but we can't force create without triggering
-        // For UI purposes, we'll only show active ones or we'd need a registry of all possible circuits
-      }
-    }
-
-    states.forEach((metrics, key) => {
+    // Known circuits - always show these even if not triggered yet
+    const knownCircuits = [
+      { id: 'ollama-primary', provider: 'ollama', label: 'Ollama Primary' },
+      { id: 'vllm-primary', provider: 'vllm', label: 'vLLM Primary' },
+    ];
+    
+    for (const circuit of knownCircuits) {
+      const metrics = this.circuitBreakerService.getMetrics(circuit.id);
       result.push({
-        resourceId: key,
+        resourceId: circuit.id,
+        provider: circuit.provider,
+        label: circuit.label,
         ...metrics,
+        failureRate: this.circuitBreakerService.getFailureRate(circuit.id),
       });
+    }
+    
+    // Add any additional dynamic circuits not in the known list
+    states.forEach((metrics, key) => {
+      if (!knownCircuits.some(kc => kc.id === key)) {
+        result.push({
+          resourceId: key,
+          provider: 'unknown',
+          label: key,
+          ...metrics,
+          failureRate: this.circuitBreakerService.getFailureRate(key),
+        });
+      }
     });
 
     return result;

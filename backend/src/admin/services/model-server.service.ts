@@ -121,7 +121,7 @@ export class ModelServerService {
 
     try {
       const endpoint = server.type === ServerType.VLLM 
-        ? `${server.url}/health`
+        ? `${server.url}/v1/models`
         : `${server.url}/api/tags`;
 
       const response = await fetch(endpoint, {
@@ -176,7 +176,7 @@ export class ModelServerService {
     
     try {
       const endpoint = type === ServerType.VLLM 
-        ? `${url}/health`
+        ? `${url}/v1/models`
         : `${url}/api/tags`;
 
       const response = await fetch(endpoint, {
@@ -416,6 +416,152 @@ export class ModelServerService {
         isActive: false,
       },
     });
+  }
+
+  // ==================== OpenAI Compatible API Test ====================
+
+  async testChatCompletion(serverId: string, prompt?: string): Promise<{
+    success: boolean;
+    message: string;
+    response?: string;
+    latency?: number;
+    model?: string;
+  }> {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server) {
+      throw new Error('Server not found');
+    }
+
+    const testPrompt = prompt || 'Hello, respond with a single word: working';
+    const startTime = Date.now();
+
+    try {
+      // Get default model from server settings or use a default
+      const settings = (server.settings as any) || {};
+      let model = settings.defaultModel || settings.model;
+
+      // If no model specified, try to get the first available model
+      if (!model) {
+        try {
+          const modelsResponse = await fetch(`${server.url}/v1/models`, {
+            signal: AbortSignal.timeout(5000),
+          });
+          if (modelsResponse.ok) {
+            const modelsData = await modelsResponse.json();
+            model = modelsData.data?.[0]?.id || 'default';
+          }
+        } catch {
+          model = 'default';
+        }
+      }
+
+      const response = await fetch(`${server.url}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: testPrompt }],
+          max_tokens: 50,
+          temperature: 0.1,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      const latency = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          message: `API error: ${response.status} - ${errorText.substring(0, 200)}`,
+          latency,
+        };
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '';
+
+      await this.prisma.systemLog.create({
+        data: {
+          level: 'INFO',
+          category: 'api_test',
+          message: `OpenAI API test on ${server.name}: ${content.substring(0, 50)}`,
+          context: { serverId, model, latency },
+        },
+      });
+
+      return {
+        success: true,
+        message: 'API test successful',
+        response: content,
+        latency,
+        model,
+      };
+    } catch (error: any) {
+      const latency = Date.now() - startTime;
+      this.logger.error(`Chat completion test failed: ${error.message}`);
+      return {
+        success: false,
+        message: error.message || 'Connection failed',
+        latency,
+      };
+    }
+  }
+
+  // ==================== vLLM Model Management ====================
+
+  async scanVLLMModels(serverId: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server || server.type !== ServerType.VLLM) {
+      throw new Error('Invalid vLLM server');
+    }
+
+    try {
+      const response = await fetch(`${server.url}/v1/models`, {
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch models');
+      }
+
+      const data = await response.json();
+      const models = (data.data || []).map((m: any) => ({
+        name: m.id,
+        id: m.id,
+        owned_by: m.owned_by || 'vllm',
+        created: m.created,
+      }));
+
+      return models;
+    } catch (error) {
+      this.logger.error(`Failed to scan vLLM models: ${error}`);
+      throw error;
+    }
+  }
+
+  async scanModels(serverId: string) {
+    const server = await this.prisma.modelServer.findUnique({
+      where: { id: serverId },
+    });
+
+    if (!server) {
+      throw new Error('Server not found');
+    }
+
+    if (server.type === ServerType.OLLAMA) {
+      return this.scanOllamaModels(serverId);
+    } else if (server.type === ServerType.VLLM) {
+      return this.scanVLLMModels(serverId);
+    } else {
+      throw new Error(`Unsupported server type: ${server.type}`);
+    }
   }
 }
 

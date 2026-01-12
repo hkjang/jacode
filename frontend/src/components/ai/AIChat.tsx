@@ -197,13 +197,24 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
 
   const checkCircuitStatus = async () => {
     try {
-      // Check primary circuit status (ollama-primary) as proxy
-      const { data } = await api.get('/api/admin/circuit-breaker/ollama-primary');
-      if (data) {
-        setCircuitStatus(data.state);
+      // Check all circuit breakers and determine overall status
+      const { data } = await api.get('/api/admin/circuit-breaker');
+      if (Array.isArray(data) && data.length > 0) {
+        // Find the worst status among all circuits
+        // OPEN > HALF_OPEN > CLOSED
+        let worstStatus: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+        for (const circuit of data) {
+          if (circuit.state === 'OPEN') {
+            worstStatus = 'OPEN';
+            break; // Worst possible, stop checking
+          } else if (circuit.state === 'HALF_OPEN' && worstStatus !== 'OPEN') {
+            worstStatus = 'HALF_OPEN';
+          }
+        }
+        setCircuitStatus(worstStatus);
       }
     } catch (e) {
-      // console.error('Failed to check circuit status');
+      // Silently handle - circuit check is optional
     }
   };
 

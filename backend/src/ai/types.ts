@@ -53,6 +53,7 @@ export interface ChatStreamChunk {
   id: string;
   content: string;
   done: boolean;
+  model?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;

@@ -87,18 +87,33 @@ export class AIService {
       complexity?: 'low' | 'medium' | 'high';
     }
   ): Promise<ChatResponse> {
-    // Use model router if enabled
-    // Circuit Breaker Check
-    const resourceId = options?.model || this.activeProvider === 'ollama' ? 'ollama-primary' : 'vllm-backup'; // Simple resource mapping
+    // First, determine which provider we'll use
+    let selectedProvider = this.getProvider();
+    let providerName = this.activeProvider;
     
-    if (this.circuitBreaker.isOpen(resourceId)) {
-      this.logger.warn(`Circuit is OPEN for ${resourceId}, rejecting request`);
-      throw new Error(`Service Unavailable: ${resourceId} is currently down (Circuit Open)`);
+    // Get default model settings from DB if no model specified
+    const finalOptions = { ...options };
+    if (!finalOptions?.model) {
+      const defaultSettings = await this.getDefaultModelSettings();
+      if (defaultSettings) {
+        finalOptions.model = defaultSettings.model;
+        if (defaultSettings.provider === 'vllm') {
+          this.activeProvider = 'vllm';
+          selectedProvider = this.vllmProvider;
+          providerName = 'vllm';
+        } else {
+          this.activeProvider = 'ollama';
+          selectedProvider = this.ollamaProvider;
+          providerName = 'ollama';
+        }
+        // Apply settings from DB
+        if (defaultSettings.temperature) finalOptions.temperature = defaultSettings.temperature;
+        if (defaultSettings.maxTokens) finalOptions.maxTokens = defaultSettings.maxTokens;
+        if (defaultSettings.topP) finalOptions.topP = defaultSettings.topP;
+      }
     }
 
     // Use model router if enabled
-    let selectedProvider = this.getProvider();
-    
     if (options?.useRouter) {
       try {
         const router = await this.getModelRouter();
@@ -109,33 +124,26 @@ export class AIService {
         });
 
         this.logger.log(`Router selected: ${selection.serverName} (${selection.reason})`);
+        providerName = selection.provider || providerName;
         
-        // TODO: Actually switch provider based on selection.provider
-        // For now we just log it, but in full implementation we would get the correct provider instance
-        // selectedProvider = this.getProviderByName(selection.provider);
+        // Switch provider based on selection
+        if (selection.provider === 'vllm') {
+          selectedProvider = this.vllmProvider;
+        } else if (selection.provider === 'ollama') {
+          selectedProvider = this.ollamaProvider;
+        }
       } catch (error) {
         this.logger.warn('Model routing failed, using default provider', error);
       }
     }
 
-    // Get default model settings from DB if no model specified
-    const finalOptions = { ...options };
-    if (!finalOptions?.model) {
-      const defaultSettings = await this.getDefaultModelSettings();
-      if (defaultSettings) {
-        finalOptions.model = defaultSettings.model;
-        if (defaultSettings.provider === 'vllm') {
-          this.activeProvider = 'vllm';
-          selectedProvider = this.vllmProvider;
-        } else {
-          this.activeProvider = 'ollama';
-          selectedProvider = this.ollamaProvider;
-        }
-        // Apply settings from DB
-        if (defaultSettings.temperature) finalOptions.temperature = defaultSettings.temperature;
-        if (defaultSettings.maxTokens) finalOptions.maxTokens = defaultSettings.maxTokens;
-        if (defaultSettings.topP) finalOptions.topP = defaultSettings.topP;
-      }
+    // Determine circuit breaker resource ID based on selected provider
+    const resourceId = providerName === 'vllm' ? 'vllm-primary' : 'ollama-primary';
+    
+    // Circuit Breaker Check
+    if (this.circuitBreaker.isOpen(resourceId)) {
+      this.logger.warn(`Circuit is OPEN for ${resourceId}, rejecting request`);
+      throw new Error(`Service Unavailable: ${resourceId} is currently down (Circuit Open)`);
     }
 
     try {

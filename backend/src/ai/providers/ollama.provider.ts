@@ -104,67 +104,83 @@ export class OllamaProvider implements OnModuleInit {
   ): AsyncGenerator<ChatStreamChunk> {
     const model = options?.model || this.defaultModel;
 
-    const response = await fetch(`${this.baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        options: {
-          temperature: options?.temperature ?? 0.7,
-          num_predict: options?.maxTokens ?? 4096,
-          top_p: options?.topP ?? 0.9,
-        },
-      }),
-    });
+    // Use AbortController for timeout (5 min max for long generations)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 300000);
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
-    }
+    try {
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+          options: {
+            temperature: options?.temperature ?? 0.7,
+            num_predict: options?.maxTokens ?? 4096,
+            top_p: options?.topP ?? 0.9,
+          },
+        }),
+        signal: controller.signal,
+      });
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('No response body');
-    }
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`Ollama API error for model "${model}" (${response.status}): ${response.statusText}${errorBody ? ` - ${errorBody.substring(0, 200)}` : ''}`);
+      }
 
-    const decoder = new TextDecoder();
-    let buffer = '';
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body from Ollama server');
+      }
 
-    while (true) {
-      const { done, value } = await reader.read();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let chunkCount = 0;
 
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        if (done) break;
 
-      for (const line of lines) {
-        if (line.trim()) {
-          try {
-            const data = JSON.parse(line);
-            const chunk: ChatStreamChunk = {
-              id: `ollama-${Date.now()}`,
-              content: data.message?.content || '',
-              done: data.done || false,
-            };
-            
-            // Capture metrics on the final chunk
-            if (data.done) {
-               chunk.usage = {
-                 promptTokens: data.prompt_eval_count || 0,
-                 completionTokens: data.eval_count || 0,
-                 totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
-               };
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const data = JSON.parse(line);
+              chunkCount++;
+              
+              const chunk: ChatStreamChunk = {
+                id: `ollama-${chunkCount}-${Date.now()}`,
+                content: data.message?.content || '',
+                done: data.done || false,
+                model: model,
+              };
+              
+              // Capture metrics on the final chunk
+              if (data.done) {
+                chunk.usage = {
+                  promptTokens: data.prompt_eval_count || 0,
+                  completionTokens: data.eval_count || 0,
+                  totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+                };
+              }
+              
+              yield chunk;
+              
+              if (data.done) return;
+            } catch (e) {
+              // Skip invalid JSON lines
             }
-            
-            yield chunk;
-          } catch (e) {
-            // Skip invalid JSON
           }
         }
       }
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

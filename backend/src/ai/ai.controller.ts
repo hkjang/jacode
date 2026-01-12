@@ -99,34 +99,22 @@ export class AIController {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
     try {
-      // Temporary: Use chatWithTools (non-streaming) and emit result as a single chunk
-      // This enables tool support while maintaining the stream API contract
-      const userId = req.user?.id;
-      const response = await this.aiService.chatWithTools(dto.messages, {
-         ...dto.options, 
-         userId,
-         projectId: (dto.options as any)?.projectId,
-         workingDirectory: (dto.options as any)?.workingDirectory
-      });
-
-      // Emit the final response as a stream chunk
-      res.write(`data: ${JSON.stringify({ 
-         content: response.content,
-         tool_calls: response.tool_calls, // Pass tool calls if needed by client
-         usage: response.usage
-      })}\n\n`);
-      
-      res.write(`data: [DONE]\n\n`);
-
-      /* 
-      // Original Streaming Logic (restored when chatWithTools supports streaming)
+      // Use real streaming for token-by-token output
       for await (const chunk of this.aiService.chatStream(dto.messages, dto.options)) {
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        
+        // Flush if available (helps with some reverse proxy setups)
+        if (typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+        
         if (chunk.done) break;
       }
-      */
+      
+      res.write(`data: [DONE]\n\n`);
     } catch (error) {
       res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     }

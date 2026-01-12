@@ -134,30 +134,41 @@ export class ModelServerController {
     return this.service.testConnection(data.url, data.type);
   }
 
-  // ==================== Ollama Model Management ====================
+  // ==================== Model Management (OLLAMA + VLLM) ====================
 
   @Get(':id/models')
-  @ApiOperation({ summary: 'Scan available models' })
+  @ApiOperation({ summary: 'Scan available models (works for both Ollama and vLLM)' })
   scanModels(@Param('id') id: string) {
-    return this.service.scanOllamaModels(id);
+    return this.service.scanModels(id);
   }
 
   @Get(':id/models/:modelName')
-  @ApiOperation({ summary: 'Get model info' })
+  @ApiOperation({ summary: 'Get model info (Ollama only)' })
   getModelInfo(@Param('id') id: string, @Param('modelName') modelName: string) {
     return this.service.getOllamaModelInfo(id, modelName);
   }
 
   @Post(':id/models/pull')
-  @ApiOperation({ summary: 'Pull a model' })
+  @ApiOperation({ summary: 'Pull a model (Ollama only)' })
   pullModel(@Param('id') id: string, @Body() data: { modelName: string }) {
     return this.service.pullOllamaModel(id, data.modelName);
   }
 
   @Delete(':id/models/:modelName')
-  @ApiOperation({ summary: 'Delete a model' })
+  @ApiOperation({ summary: 'Delete a model (Ollama only)' })
   deleteModel(@Param('id') id: string, @Param('modelName') modelName: string) {
     return this.service.deleteOllamaModel(id, modelName);
+  }
+
+  // ==================== OpenAI Compatible API Test ====================
+
+  @Post(':id/test-chat')
+  @ApiOperation({ summary: 'Test OpenAI compatible chat completion API' })
+  testChatCompletion(
+    @Param('id') id: string,
+    @Body() data: { prompt?: string }
+  ) {
+    return this.service.testChatCompletion(id, data.prompt);
   }
 }
 
