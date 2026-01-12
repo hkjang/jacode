@@ -20,7 +20,8 @@ import {
   Maximize2,
   GitCompare,
   RotateCcw,
-  Wand2 // For Magic Fill
+  Wand2, // For Magic Fill
+  Copy, // For Duplicate
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api, aiApi } from '@/lib/api';
@@ -85,16 +86,17 @@ export default function PromptsPage() {
     return Array.from(vars);
   }, [editContent]);
 
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<{ id: string; name: string; model: string; provider: string }[]>([]);
 
   const loadModels = async () => {
     try {
-      const info = await aiApi.getProviderInfo();
-      if (info && Array.isArray(info.models)) {
-        setAvailableModels(info.models.map((m: any) => typeof m === 'string' ? m : m.id));
+      const models = await aiApi.listActiveModels();
+      if (Array.isArray(models)) {
+        setAvailableModels(models);
       }
     } catch (e) {
-      console.warn('Failed to load models', e);
+      console.error('Failed to load models', e);
+      setAvailableModels([]);
     }
   };
 
@@ -214,8 +216,6 @@ export default function PromptsPage() {
   };
 
   const handleRollback = async (version: number) => {
-      // API call to rollback (Assuming endpoint exists or just apply content from history)
-      // Since backend has dedicated rollback endpoint in original code:
       if (!selectedTemplate || !confirm(`Rollback to v${version}?`)) return;
       try {
         await api.post(`/api/admin/prompts/${selectedTemplate.id}/rollback/${version}`);
@@ -224,15 +224,42 @@ export default function PromptsPage() {
         if (updated) handleSelect(updated);
       } catch (error) {
         console.error('Rollback failed', error);
+        alert('Failed to rollback');
       }
   };
 
-  const handleCompare = (versionContent: string, version: number) => {
-      setDiffOriginal(versionContent); // History Version (Left)
-      setDiffModified(editContent);    // Current Edit (Right) - OR actually usually comparisons are Current vs History?
-      // Let's do: Left = Selected History Version, Right = Current Workspace
-      setDiffVersion(version);
-      setShowDiff(true);
+  const handleCompare = async (version: number) => {
+      if (!selectedTemplate) return;
+      try {
+        // Fetch actual version content from API
+        const res = await api.get(`/api/admin/prompts/${selectedTemplate.id}/versions/${version}`);
+        const versionData = res.data;
+        setDiffOriginal(versionData.content); // History Version (Left)
+        setDiffModified(editContent);          // Current Edit (Right)
+        setDiffVersion(version);
+        setShowDiff(true);
+      } catch (error) {
+        console.error('Failed to fetch version content', error);
+        alert('Failed to load version content');
+      }
+  };
+
+  const handleDuplicate = async () => {
+    if (!selectedTemplate) return;
+    const newName = prompt('Enter name for the duplicate:', `${selectedTemplate.name} (Copy)`);
+    if (newName === null) return; // User cancelled
+    
+    try {
+      const res = await api.post(`/api/admin/prompts/${selectedTemplate.id}/duplicate`, { name: newName || undefined });
+      await loadTemplates();
+      if (res.data?.id) {
+        handleSelect(res.data);
+      }
+      alert('Template duplicated successfully!');
+    } catch (error) {
+      console.error('Duplicate failed', error);
+      alert('Failed to duplicate template');
+    }
   };
   
   const handleDiffApply = () => {
@@ -400,6 +427,10 @@ export default function PromptsPage() {
                         </Button>
                     )}
 
+                    <Button size="sm" variant="outline" onClick={handleDuplicate}>
+                      <Copy className="h-4 w-4 mr-1" /> Duplicate
+                    </Button>
+
                     <Button size="sm" onClick={handleSave} disabled={editContent === selectedTemplate.content}>
                       <Save className="h-4 w-4 mr-1" /> Save
                     </Button>
@@ -521,7 +552,7 @@ export default function PromptsPage() {
                                   onChange={e => setTestModel(e.target.value)}
                                 >
                                   <option value="">Default</option>
-                                  {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                  {availableModels.map(m => <option key={m.id} value={m.model}>{m.name} ({m.provider})</option>)}
                                 </select>
                             </div>
                             <div className="flex-1 bg-card border rounded-lg p-3 overflow-auto font-mono text-xs whitespace-pre-wrap">
@@ -540,7 +571,7 @@ export default function PromptsPage() {
                                     onChange={e => setTestModelB(e.target.value)}
                                   >
                                     <option value="">Select Model...</option>
-                                    {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                    {availableModels.map(m => <option key={m.id} value={m.model}>{m.name} ({m.provider})</option>)}
                                   </select>
                               </div>
                               <div className="flex-1 bg-card border rounded-lg p-3 overflow-auto font-mono text-xs whitespace-pre-wrap">
@@ -572,20 +603,7 @@ export default function PromptsPage() {
                                          <div className="flex items-center gap-2">
                                              <Button 
                                                 size="sm" variant="outline" 
-                                                onClick={() => handleCompare(`-- Version ${v.version} Content Placeholder --\n(API should fetch content)`, v.version)}
-                                                // Note: Ideally we compare with retrieved content. 
-                                                // For now, we assume we need to fetch it or it's in a rich object. 
-                                                // If 'versions' only has metadata, we might need a fetch call.
-                                                // Assuming we can't do full diff without fetch, we'll just mock/alert or improve later.
-                                                // To make it functional, let's assume rollback endpoint or separate fetch exists.
-                                                // Since I cannot implement backend fetch right now effectively without changing API, 
-                                                // I will just add the button that triggers 'handleRollback' labeled rollback, 
-                                                // and Comparison will be disabled or just show notification.
-                                                // Wait, I promised Diff. I should make it work.
-                                                // The 'templates' state is simple. 
-                                                // But 'handleRollback' calls `/rollback/v`.
-                                                // Let's implement 'fetchVersion' logic if possible?
-                                                // I'll skip deep fetch for now and just show Rollback.
+                                                onClick={() => handleCompare(v.version)}
                                              >
                                                 <GitCompare className="h-3 w-3 mr-1" /> Compare
                                              </Button>

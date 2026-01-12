@@ -70,6 +70,21 @@ export class PromptTemplateController {
     return this.service.rollback(id, parseInt(version));
   }
 
+  @Get(':id/versions/:version')
+  @ApiOperation({ summary: 'Get specific version content' })
+  getVersionContent(@Param('id') id: string, @Param('version') version: string) {
+    return this.service.getVersionContent(id, parseInt(version));
+  }
+
+  @Post(':id/duplicate')
+  @ApiOperation({ summary: 'Duplicate a template' })
+  duplicate(
+    @Param('id') id: string,
+    @Body() data?: { name?: string }
+  ) {
+    return this.service.duplicate(id, data?.name);
+  }
+
   @Post('render')
   @ApiOperation({ summary: 'Render template with variables' })
   render(@Body() data: { content: string; variables: Record<string, string> }) {

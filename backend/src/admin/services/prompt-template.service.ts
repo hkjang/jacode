@@ -156,6 +156,72 @@ export class PromptTemplateService {
     });
   }
 
+  /**
+   * Get specific version content for diff comparison
+   */
+  async getVersionContent(id: string, version: number) {
+    const versionRecord = await this.prisma.promptTemplateVersion.findFirst({
+      where: { templateId: id, version },
+    });
+
+    if (!versionRecord) {
+      throw new Error(`Version ${version} not found for template ${id}`);
+    }
+
+    return versionRecord;
+  }
+
+  /**
+   * Duplicate a template with a new name
+   */
+  async duplicate(id: string, newName?: string) {
+    const template = await this.findById(id);
+    
+    if (!template) {
+      throw new Error('Template not found');
+    }
+
+    // Generate unique name
+    const baseName = newName || `${template.name} (Copy)`;
+    let finalName = baseName;
+    let counter = 1;
+    
+    while (await this.findByName(finalName)) {
+      finalName = `${baseName} ${counter++}`;
+    }
+
+    return this.create({
+      name: finalName,
+      type: template.type,
+      description: template.description || undefined,
+      content: template.content,
+      variables: template.variables,
+    });
+  }
+
+  /**
+   * Validate template data before create/update
+   */
+  private validateTemplateData(data: { name?: string; content?: string }) {
+    const errors: string[] = [];
+    
+    if (data.name !== undefined && (!data.name || data.name.trim().length === 0)) {
+      errors.push('Template name is required');
+    }
+    
+    if (data.name && data.name.length > 100) {
+      errors.push('Template name must be 100 characters or less');
+    }
+    
+    if (data.content !== undefined && (!data.content || data.content.trim().length === 0)) {
+      errors.push('Template content is required');
+    }
+    
+    if (errors.length > 0) {
+      throw new Error(errors.join(', '));
+    }
+  }
+
   // ==================== Template Rendering ====================
 
   render(content: string, variables: Record<string, string>): string {
