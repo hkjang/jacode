@@ -1,27 +1,85 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { IsString, IsOptional, IsObject, IsNumber, IsBoolean, ValidateNested, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
+
+// Rules 유효성 검사를 위한 중첩 클래스
+export class RoutingRulesDto {
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  costWeight: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  performanceWeight: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  availabilityWeight: number;
+
+  @IsOptional()
+  @IsObject()
+  modelPreferences?: Record<string, string[]>;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxCostPerRequest?: number;
+
+  @IsOptional()
+  @IsString()
+  preferredProvider?: string;
+}
 
 export class CreateRoutingPolicyDto {
+  @IsString()
   name: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
-  rules: {
-    costWeight: number;
-    performanceWeight: number;
-    availabilityWeight: number;
-    modelPreferences?: any;
-    maxCostPerRequest?: number;
-    preferredProvider?: string;
-  };
+
+  @ValidateNested()
+  @Type(() => RoutingRulesDto)
+  rules: RoutingRulesDto;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(1000)
   priority?: number;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
 export class UpdateRoutingPolicyDto {
+  @IsOptional()
+  @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
-  rules?: any;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RoutingRulesDto)
+  rules?: RoutingRulesDto;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(1000)
   priority?: number;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -108,7 +166,7 @@ export class RoutingPolicyController {
     });
 
     if (!policy) {
-      throw new Error('Policy not found');
+      throw new NotFoundException('Policy not found');
     }
 
     return this.prisma.modelRoutingPolicy.update({
@@ -125,6 +183,10 @@ export class RoutingPolicyController {
     const policy = await this.prisma.modelRoutingPolicy.findUnique({
       where: { id },
     });
+
+    if (!policy) {
+      throw new NotFoundException('Policy not found');
+    }
 
     const { id: _, createdAt, updatedAt, ...data } = policy as any;
 

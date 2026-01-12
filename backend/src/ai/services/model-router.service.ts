@@ -226,6 +226,7 @@ export class ModelRouterService {
 
   /**
    * Apply routing rules to filter and score candidates
+   * Model preferences now provide bonus scoring rather than filtering
    */
   private applyRoutingRules(
     servers: any[],
@@ -236,31 +237,31 @@ export class ModelRouterService {
       maxCost?: number;
       preferredProvider?: string;
     }
-  ): ModelSelection[] {
-    const candidates: ModelSelection[] = [];
+  ): (ModelSelection & { isPreferred: boolean })[] {
+    const candidates: (ModelSelection & { isPreferred: boolean })[] = [];
 
     for (const server of servers) {
-      // Check preferred provider
+      // Check preferred provider (strict filter)
       if (criteria.preferredProvider && server.type !== criteria.preferredProvider) {
         continue;
       }
 
-      // Check model preferences for prompt type
+      // Check model preferences for prompt type (bonus scoring, not filtering)
       const preferredModels = policy.modelPreferences?.[criteria.promptType] || [];
       const modelName = this.extractModelName(server);
       
+      // Determine if this model is preferred (for bonus scoring)
       const isPreferred = preferredModels.length === 0 || 
-        preferredModels.some((pm: string) => modelName.includes(pm));
+        preferredModels.some((pm: string) => modelName.toLowerCase().includes(pm.toLowerCase()));
 
-      if (!isPreferred) {
-        this.logger.debug(`Skipping ${server.name}: model ${modelName} not preferred for ${criteria.promptType}`);
-        continue;
+      if (isPreferred) {
+        this.logger.debug(`Model ${modelName} is preferred for ${criteria.promptType}`);
       }
 
       // Estimate cost
       const estimatedCost = this.estimateCost(server, criteria.complexity);
 
-      // Check cost constraint
+      // Check cost constraint (strict filter)
       if (criteria.maxCost && estimatedCost > criteria.maxCost) {
         continue;
       }
@@ -270,8 +271,9 @@ export class ModelRouterService {
         serverName: server.name,
         modelName,
         provider: server.type,
-        reason: `Suitable for ${criteria.promptType} (complexity: ${criteria.complexity})`,
+        reason: `${isPreferred ? '★ Preferred' : 'Available'} for ${criteria.promptType} (complexity: ${criteria.complexity})`,
         estimatedCost,
+        isPreferred,
       });
     }
 
@@ -280,14 +282,19 @@ export class ModelRouterService {
 
   /**
    * Select best candidate using weighted scoring
+   * Preferred models get a bonus score
    */
   private selectBestCandidate(
-    candidates: ModelSelection[],
+    candidates: (ModelSelection & { isPreferred?: boolean })[],
     policy: any
   ): ModelSelection {
     if (candidates.length === 1) {
-      return candidates[0];
+      const { isPreferred, ...result } = candidates[0];
+      return result;
     }
+
+    // Preference bonus weight (configurable via policy, default 0.2)
+    const preferenceBonus = policy.preferenceBonus ?? 0.2;
 
     // Score each candidate
     const scored = candidates.map(candidate => {
@@ -306,26 +313,37 @@ export class ModelRouterService {
       if (circuitMetrics.state === CircuitState.CLOSED) performanceScore = 1.0;
       else if (circuitMetrics.state === CircuitState.HALF_OPEN) performanceScore = 0.7;
 
-      // Weighted total score
-      const totalScore =
+      // Base weighted score
+      const baseScore =
         costScore * (policy.costWeight || 0.3) +
         performanceScore * (policy.performanceWeight || 0.4) +
         availabilityScore * (policy.availabilityWeight || 0.3);
 
+      // Add preference bonus if model is preferred
+      const totalScore = candidate.isPreferred 
+        ? baseScore + preferenceBonus 
+        : baseScore;
+
       return {
         candidate,
         score: totalScore,
-        breakdown: { availabilityScore, costScore, performanceScore },
+        breakdown: { 
+          availabilityScore, 
+          costScore, 
+          performanceScore,
+          preferenceBonus: candidate.isPreferred ? preferenceBonus : 0,
+        },
       };
     });
 
-    //  Sort by score descending
+    // Sort by score descending
     scored.sort((a, b) => b.score - a.score);
 
     const winner = scored[0];
-    winner.candidate.reason += ` (score: ${winner.score.toFixed(2)})`;
+    const { isPreferred, ...result } = winner.candidate;
+    result.reason += ` (score: ${winner.score.toFixed(2)}${isPreferred ? ' ★' : ''})`;
 
-    return winner.candidate;
+    return result;
   }
 
   /**
