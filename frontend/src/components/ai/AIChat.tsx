@@ -201,17 +201,17 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
       const { data } = await api.get('/api/admin/circuit-breaker');
       if (Array.isArray(data) && data.length > 0) {
         // Find the worst status among all circuits
-        // OPEN > HALF_OPEN > CLOSED
-        let worstStatus: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
-        for (const circuit of data) {
-          if (circuit.state === 'OPEN') {
-            worstStatus = 'OPEN';
-            break; // Worst possible, stop checking
-          } else if (circuit.state === 'HALF_OPEN' && worstStatus !== 'OPEN') {
-            worstStatus = 'HALF_OPEN';
-          }
+        // Priority: OPEN > HALF_OPEN > CLOSED
+        const hasOpen = data.some((circuit: any) => circuit.state === 'OPEN');
+        const hasHalfOpen = data.some((circuit: any) => circuit.state === 'HALF_OPEN');
+        
+        if (hasOpen) {
+          setCircuitStatus('OPEN');
+        } else if (hasHalfOpen) {
+          setCircuitStatus('HALF_OPEN');
+        } else {
+          setCircuitStatus('CLOSED');
         }
-        setCircuitStatus(worstStatus);
       }
     } catch (e) {
       // Silently handle - circuit check is optional
