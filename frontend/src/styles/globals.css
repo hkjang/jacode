@@ -73,14 +73,15 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
 }
 
 /* Monaco Editor custom styles */
-.monaco-editor {
-  font-family: var(--font-mono), 'JetBrains Mono', 'Fira Code', monospace !important;
-}
+/* Monaco Editor custom styles */
+/* Removed conflicting font-family rule to let Monaco control its own font rendering */
 
 /* Scrollbar styles */
 ::-webkit-scrollbar {
@@ -158,12 +159,20 @@
 
 /* Loading animation */
 .loading-dots::after {
-  content: '';
+  content: "";
   animation: dots 1.4s infinite;
 }
 
 @keyframes dots {
-  0%, 20% { content: '.'; }
-  40% { content: '..'; }
-  60%, 100% { content: '...'; }
+  0%,
+  20% {
+    content: ".";
+  }
+  40% {
+    content: "..";
+  }
+  60%,
+  100% {
+    content: "...";
+  }
 }

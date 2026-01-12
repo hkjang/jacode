@@ -326,8 +326,10 @@ export function MonacoEditor({
           options={{
             readOnly,
             fontSize: 14,
-            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fontFamily: "var(--font-mono), 'JetBrains Mono', 'Fira Code', monospace",
             fontLigatures: true,
+            letterSpacing: 0,
+            lineHeight: 21, // 1.5 * 14px
             minimap: { enabled: true, scale: 1 },
             scrollBeyondLastLine: false,
             wordWrap: 'on',
