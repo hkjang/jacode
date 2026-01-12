@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
-import { DiffEditor, Monaco } from '@monaco-editor/react';
+import { DiffEditor, Monaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
+
+// Configure loader to use local files
+loader.config({ paths: { vs: '/monaco/vs' } });
 import { useTheme } from 'next-themes';
 import { Loader2 } from 'lucide-react';
 

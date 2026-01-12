@@ -14,6 +14,10 @@ COPY . .
 # Install dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
+# Copy Monaco Editor assets to public directory for offline usage
+RUN mkdir -p frontend/public/monaco
+RUN cp -r node_modules/monaco-editor/min/vs frontend/public/monaco/vs
+
 # Build the frontend
 # Note: We run build for the specific package
 ARG NEXT_PUBLIC_API_URL
@@ -37,7 +41,7 @@ RUN chown nextjs:nodejs .next
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/static ./frontend/.next/static
-# COPY --from=builder --chown=nextjs:nodejs /app/frontend/public ./frontend/public
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/public ./frontend/public
 
 USER nextjs
 
