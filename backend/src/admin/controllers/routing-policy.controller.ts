@@ -81,6 +81,14 @@ export class UpdateRoutingPolicyDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+  @IsOptional()
+  id?: string;
+
+  @IsOptional()
+  createdAt?: any;
+
+  @IsOptional()
+  updatedAt?: any;
 }
 
 @Controller('api/admin/routing-policies')
@@ -140,9 +148,11 @@ export class RoutingPolicyController {
    */
   @Put(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateRoutingPolicyDto) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: bodyId, createdAt, updatedAt, ...data } = dto;
     return this.prisma.modelRoutingPolicy.update({
       where: { id },
-      data: dto as any,
+      data: data as any,
     });
   }
 
