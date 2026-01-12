@@ -16,7 +16,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # Copy Monaco Editor assets to public directory for offline usage
 RUN mkdir -p frontend/public/monaco
-RUN cp -r node_modules/monaco-editor/min/vs frontend/public/monaco/vs
+RUN cp -r frontend/node_modules/monaco-editor/min/vs frontend/public/monaco/vs
 
 # Build the frontend
 # Note: We run build for the specific package
