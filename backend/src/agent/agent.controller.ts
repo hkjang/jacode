@@ -23,6 +23,12 @@ import { AgentStatus } from '@prisma/client';
 import { QueueService } from '../queue/queue.service';
 import { ToolRegistryService } from './services/tool-registry.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AgentOrchestratorService } from './services/agent-orchestrator.service';
+import { SessionManagerService } from './services/session-manager.service';
+import { GitService } from './services/git.service';
+import { TokenTrackingService } from '../ai/services/token-tracking.service';
+import { ASTSkeletonService } from './services/ast-skeleton.service';
+import { ValidationService } from './services/validation.service';
 
 @ApiTags('agents')
 @ApiBearerAuth()
@@ -34,6 +40,12 @@ export class AgentController {
     private readonly queueService: QueueService,
     private readonly toolRegistry: ToolRegistryService,
     private readonly prisma: PrismaService,
+    private readonly orchestrator: AgentOrchestratorService,
+    private readonly sessions: SessionManagerService,
+    private readonly git: GitService,
+    private readonly tokenTracker: TokenTrackingService,
+    private readonly astSkeleton: ASTSkeletonService,
+    private readonly validation: ValidationService,
   ) {}
 
   @Post('tasks')
@@ -200,5 +212,91 @@ export class AgentController {
   async getQueueStats() {
     return this.queueService.getAllQueueStats();
   }
-}
 
+  // ============================================================================
+  // AST Analysis Endpoints
+  // ============================================================================
+
+  @Post('ast/analyze')
+  @ApiOperation({ summary: 'Analyze file and extract symbols' })
+  async analyzeFile(
+    @Body() body: { filePath: string; content: string },
+  ) {
+    // Use ASTSkeletonService for analysis
+    try {
+      const skeleton = await this.astSkeleton.generateSkeleton(body.content, body.filePath);
+      return {
+        language: skeleton.language,
+        lineCount: skeleton.lineCount,
+        symbols: skeleton.symbols,
+        imports: { imports: skeleton.imports.map(i => ({ source: i, name: i.split('/').pop() })) },
+        exports: { exports: skeleton.exports },
+      };
+    } catch (error: any) {
+      return { error: error.message, symbols: [], imports: [], exports: [] };
+    }
+  }
+
+  @Post('ast/skeleton')
+  @ApiOperation({ summary: 'Generate AST skeleton for context optimization' })
+  async getASTSkeleton(
+    @Body() body: { filePath: string; content: string; options?: object },
+  ) {
+    const { ASTSkeletonService } = await import('./services/ast-skeleton.service');
+    const skeletonService = new ASTSkeletonService();
+    
+    const skeleton = await skeletonService.generateSkeleton(
+      body.content, 
+      body.filePath,
+      body.options as any
+    );
+    
+    return {
+      ...skeleton,
+      formatted: skeletonService.formatForContext(skeleton),
+    };
+  }
+
+  @Post('ast/diff')
+  @ApiOperation({ summary: 'Generate diff between original and modified code' })
+  async generateDiff(
+    @Body() body: { original: string; modified: string; filePath?: string },
+  ) {
+    const { CodeDiffService } = await import('./services/code-diff.service');
+    const diffService = new CodeDiffService();
+    
+    const diff = diffService.generateDiff(
+      body.original,
+      body.modified,
+      body.filePath || 'file'
+    );
+    
+    return {
+      ...diff,
+      markdown: diffService.formatAsMarkdown(diff),
+    };
+  }
+
+  @Get('ast/supported-languages')
+  @ApiOperation({ summary: 'Get list of supported languages for AST parsing' })
+  async getSupportedLanguages() {
+    return {
+      languages: [
+        { id: 'typescript', extensions: ['.ts', '.tsx'], name: 'TypeScript' },
+        { id: 'javascript', extensions: ['.js', '.jsx', '.mjs'], name: 'JavaScript' },
+        { id: 'python', extensions: ['.py'], name: 'Python' },
+        { id: 'java', extensions: ['.java'], name: 'Java' },
+        { id: 'go', extensions: ['.go'], name: 'Go' },
+      ],
+    };
+  }
+
+  @Post('validation/check')
+  @ApiOperation({ summary: 'Run validation checks on project' })
+  async runValidation(
+    @Body() body: { projectRoot: string; checks?: string[] },
+  ) {
+    const result = await this.validation.runFullValidation(body.projectRoot);
+    return result;
+  }
+}

@@ -116,6 +116,8 @@ export class VLLMProvider implements OnModuleInit {
         top_p: options?.topP ?? 0.9,
         stop: options?.stop,
         stream: false,
+        // vLLM extended parameter for reasoning effort control
+        extra_body: options?.effort !== undefined ? { effort: options.effort } : undefined,
       }),
     });
 

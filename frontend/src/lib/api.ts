@@ -182,6 +182,107 @@ export const agentApi = {
     const { data } = await api.post(`/api/agents/tasks/${taskId}/reject`, { reason });
     return data;
   },
+
+  // Orchestrator endpoints
+  orchestrate: async (payload: { goal: string; projectRoot: string; autoApprove?: boolean; dryRun?: boolean }) => {
+    const { data } = await api.post('/api/agents/orchestrate', payload);
+    return data;
+  },
+
+  // Session endpoints
+  getSessions: async () => {
+    const { data } = await api.get('/api/agents/sessions');
+    return data;
+  },
+
+  getSession: async (sessionId: string) => {
+    const { data } = await api.get(`/api/agents/sessions/${sessionId}`);
+    return data;
+  },
+
+  approveSession: async (sessionId: string) => {
+    const { data } = await api.post(`/api/agents/sessions/${sessionId}/approve`);
+    return data;
+  },
+
+  rejectSession: async (sessionId: string) => {
+    const { data } = await api.post(`/api/agents/sessions/${sessionId}/reject`);
+    return data;
+  },
+
+  cancelSession: async (sessionId: string) => {
+    const { data } = await api.post(`/api/agents/sessions/${sessionId}/cancel`);
+    return data;
+  },
+
+  // Git endpoints
+  getGitStatus: async (projectRoot: string) => {
+    const { data } = await api.get('/api/agents/git/status', { params: { projectRoot } });
+    return data;
+  },
+
+  getGitCommits: async (projectRoot: string, limit?: number) => {
+    const { data } = await api.get('/api/agents/git/commits', { params: { projectRoot, limit } });
+    return data;
+  },
+
+  gitCommit: async (projectRoot: string, message: string, stageAll?: boolean) => {
+    const { data } = await api.post('/api/agents/git/commit', { projectRoot, message, stageAll });
+    return data;
+  },
+
+  gitBranch: async (projectRoot: string, name: string, create?: boolean) => {
+    const { data } = await api.post('/api/agents/git/branch', { projectRoot, name, create });
+    return data;
+  },
+
+  // Token tracking endpoints
+  getTokenStats: async () => {
+    const { data } = await api.get('/api/agents/tokens/stats');
+    return data;
+  },
+
+  getRecentTokenUsage: async (limit?: number) => {
+    const { data } = await api.get('/api/agents/tokens/recent', { params: { limit } });
+    return data;
+  },
+
+  // Tools endpoints
+  getTools: async () => {
+    const { data } = await api.get('/api/agents/tools');
+    return data;
+  },
+
+  updateTool: async (name: string, config: { isEnabled?: boolean; config?: object }) => {
+    const { data } = await api.patch(`/api/agents/tools/${name}`, config);
+    return data;
+  },
+
+  // AST Analysis endpoints
+  analyzeFile: async (filePath: string, content: string) => {
+    const { data } = await api.post('/api/agents/ast/analyze', { filePath, content });
+    return data;
+  },
+
+  getASTSkeleton: async (filePath: string, content: string, options?: object) => {
+    const { data } = await api.post('/api/agents/ast/skeleton', { filePath, content, options });
+    return data;
+  },
+
+  generateCodeDiff: async (original: string, modified: string, filePath?: string) => {
+    const { data } = await api.post('/api/agents/ast/diff', { original, modified, filePath });
+    return data;
+  },
+
+  getSupportedLanguages: async () => {
+    const { data } = await api.get('/api/agents/ast/supported-languages');
+    return data;
+  },
+
+  runValidation: async (projectRoot: string, checks?: string[]) => {
+    const { data } = await api.post('/api/agents/validation/check', { projectRoot, checks });
+    return data;
+  },
 };
 
 // Artifact API

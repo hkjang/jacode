@@ -1,0 +1,398 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg-primary, #0d1117);
+  color: var(--color-text-primary, #e6edf3);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--color-bg-secondary, #161b22);
+  border-bottom: 1px solid var(--color-border, #30363d);
+}
+
+.tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #8b949e);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: var(--color-bg-tertiary, #21262d);
+  color: var(--color-text-primary, #e6edf3);
+}
+
+.tab.active {
+  background: var(--color-accent, #238636);
+  color: white;
+}
+
+.content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.panel {
+  background: var(--color-bg-secondary, #161b22);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.panel h2 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.panel h3 {
+  margin: 16px 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #8b949e);
+}
+
+.formGroup {
+  margin-bottom: 16px;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #8b949e);
+}
+
+.formGroup input,
+.formGroup textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--color-bg-primary, #0d1117);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e6edf3);
+  font-size: 14px;
+}
+
+.formGroup textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.inputRow input {
+  flex: 1;
+}
+
+.checkboxRow {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.checkboxRow label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  padding: 10px 20px;
+  background: var(--color-accent, #238636);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  padding: 8px 16px;
+  background: var(--color-bg-tertiary, #21262d);
+  color: var(--color-text-primary, #e6edf3);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.secondaryButton:hover {
+  background: var(--color-bg-secondary, #161b22);
+  border-color: var(--color-text-secondary, #8b949e);
+}
+
+.error {
+  padding: 12px 16px;
+  margin: 0 16px 16px 16px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid #f85149;
+  border-radius: 6px;
+  color: #f85149;
+  font-size: 14px;
+}
+
+.result {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--color-bg-primary, #0d1117);
+  border-radius: 6px;
+}
+
+.result p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.badge.success {
+  background: rgba(35, 134, 54, 0.2);
+  color: #3fb950;
+}
+
+.badge.failure {
+  background: rgba(248, 81, 73, 0.2);
+  color: #f85149;
+}
+
+.empty {
+  color: var(--color-text-secondary, #8b949e);
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.sessionList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sessionCard {
+  padding: 16px;
+  background: var(--color-bg-primary, #0d1117);
+  border-radius: 6px;
+}
+
+.sessionHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.state {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.state.idle { background: #30363d; color: #8b949e; }
+.state.planning { background: #1f6feb33; color: #58a6ff; }
+.state.executing { background: #23863633; color: #3fb950; }
+.state.awaiting_approval { background: #d2992233; color: #d29922; }
+.state.completed { background: #23863633; color: #3fb950; }
+.state.failed { background: #f8514933; color: #f85149; }
+.state.cancelled { background: #30363d; color: #8b949e; }
+
+.sessionId {
+  font-size: 12px;
+  color: var(--color-text-secondary, #8b949e);
+  font-family: monospace;
+}
+
+.goal {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+.sessionMeta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #8b949e);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.approveBtn,
+.rejectBtn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.approveBtn {
+  background: #238636;
+  color: white;
+}
+
+.rejectBtn {
+  background: #da3633;
+  color: white;
+}
+
+.warning {
+  color: #d29922;
+  padding: 12px;
+  background: #d2992233;
+  border-radius: 6px;
+}
+
+.gitInfo {
+  margin-bottom: 16px;
+}
+
+.branch {
+  padding: 4px 12px;
+  background: var(--color-bg-tertiary, #21262d);
+  border-radius: 16px;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.fileList {
+  margin-bottom: 20px;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border, #30363d);
+  font-size: 13px;
+}
+
+.fileStatus {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fileStatus.added { background: #238636; color: white; }
+.fileStatus.modified { background: #1f6feb; color: white; }
+.fileStatus.deleted { background: #da3633; color: white; }
+.fileStatus.untracked { background: #6e7681; color: white; }
+
+.filePath {
+  flex: 1;
+  font-family: monospace;
+}
+
+.staged {
+  padding: 2px 6px;
+  background: #23863633;
+  color: #3fb950;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.commitSection {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.commitSection input {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--color-bg-primary, #0d1117);
+  border: 1px solid var(--color-border, #30363d);
+  border-radius: 6px;
+  color: var(--color-text-primary, #e6edf3);
+  font-size: 14px;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.statCard {
+  padding: 20px;
+  background: var(--color-bg-primary, #0d1117);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.statValue {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-accent, #58a6ff);
+  margin-bottom: 4px;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--color-text-secondary, #8b949e);
+}
+
+.modelBreakdown {
+  margin-top: 20px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border, #30363d);
+}
+
+.table th {
+  color: var(--color-text-secondary, #8b949e);
+  font-weight: 500;
+}

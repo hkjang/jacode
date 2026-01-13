@@ -16,6 +16,9 @@ import { ModelRouterService } from './services/model-router.service';
 import { AutoRefactoringAgent } from './services/auto-refactoring.service';
 import { MultiFileEditorService } from './services/multi-file-editor.service';
 import { BatchProcessingService } from './services/batch-processing.service';
+import { EffortControllerService } from './services/effort-controller.service';
+import { ThinkingStreamService } from './services/thinking-stream.service';
+import { TokenTrackingService } from './services/token-tracking.service';
 
 @Module({
   imports: [PrismaModule, FeatureToggleModule],
@@ -34,6 +37,9 @@ import { BatchProcessingService } from './services/batch-processing.service';
     AutoRefactoringAgent,
     MultiFileEditorService,
     BatchProcessingService,
+    EffortControllerService,
+    ThinkingStreamService,
+    TokenTrackingService,
   ],
   controllers: [AIController],
   exports: [
@@ -49,6 +55,9 @@ import { BatchProcessingService } from './services/batch-processing.service';
     AutoRefactoringAgent,
     MultiFileEditorService,
     BatchProcessingService,
+    EffortControllerService,
+    ThinkingStreamService,
+    TokenTrackingService,
   ],
 })
 export class AIModule {}

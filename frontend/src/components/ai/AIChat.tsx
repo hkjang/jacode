@@ -4,7 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Send, X, Sparkles, Code, FileCode, Loader2, Wand2, History, Plus, Trash2, FilePlus, FileMinus, Copy, Download, RefreshCw, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { aiApi, api, API_BASE_URL } from '@/lib/api';
+import { aiApi, api, API_BASE_URL, agentApi } from '@/lib/api';
+import { addASTRecord } from '@/lib/astHistoryStore';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AICodeBlock, DiffPreviewModal } from './AICodeBlock';
@@ -159,6 +160,11 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
     }
     return true;
   });
+
+  // AST Analysis State
+  const [astStatus, setAstStatus] = useState<'idle' | 'analyzing' | 'done' | 'error'>('idle');
+  const [astResults, setAstResults] = useState<{filePath: string; symbols: number; formatted: string}[]>([]);
+  const [showAstPanel, setShowAstPanel] = useState(false);
 
   // Persist model selection when it changes
   const handleModelChange = (model: string) => {
@@ -400,9 +406,64 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
       }
 
       // Build context from all files (including strategic ones)
-      const context = strategicFiles.length > 0
-        ? strategicFiles.map(f => `File${f.source === 'auto' ? ' (Auto)' : ''}: ${f.path}\n\`\`\`${f.language || ''}\n${f.content}\n\`\`\``).join('\n\n')
-        : '';
+      // Use AST skeleton for files > 100 lines to reduce token usage
+      const contextParts: string[] = [];
+      const newAstResults: {filePath: string; symbols: number; formatted: string}[] = [];
+      
+      // Show AST analysis status if there are large files
+      const largeFiles = strategicFiles.filter(f => (f.content?.split('\n').length || 0) > 100);
+      if (largeFiles.length > 0) {
+        setAstStatus('analyzing');
+      }
+      
+      for (const f of strategicFiles) {
+        const lineCount = f.content?.split('\n').length || 0;
+        const label = f.source === 'auto' ? ' (Auto)' : '';
+        
+        if (lineCount > 100) {
+          // Use AST skeleton for large files
+          try {
+            const skeleton = await agentApi.getASTSkeleton(f.path, f.content);
+            contextParts.push(`File${label}: ${f.path} (AST Summary)\n\`\`\`\n${skeleton.formatted}\n\`\`\``);
+            newAstResults.push({
+              filePath: f.path,
+              symbols: skeleton.symbols?.length || 0,
+              formatted: skeleton.formatted
+            });
+            
+            // Save to AST history store for viewing in dedicated pages
+            addASTRecord({
+              filePath: f.path,
+              language: skeleton.language || f.language || 'unknown',
+              lineCount: skeleton.lineCount || lineCount,
+              symbols: skeleton.symbols || [],
+              imports: skeleton.imports || [],
+              exports: skeleton.exports || [],
+              tokenEstimate: skeleton.tokenEstimate || Math.ceil((f.content?.length || 0) / 4),
+              projectId,
+              source: 'editor',
+            });
+          } catch {
+            // Fallback to truncated content
+            const truncated = f.content.split('\n').slice(0, 50).join('\n') + '\n// ... (truncated)';
+            contextParts.push(`File${label}: ${f.path}\n\`\`\`${f.language || ''}\n${truncated}\n\`\`\``);
+            setAstStatus('error');
+          }
+        } else {
+          // Include full content for small files
+          contextParts.push(`File${label}: ${f.path}\n\`\`\`${f.language || ''}\n${f.content}\n\`\`\``);
+        }
+      }
+      
+      // Update AST results and status
+      if (newAstResults.length > 0) {
+        setAstResults(newAstResults);
+        setAstStatus('done');
+        // Auto-hide status after 3 seconds
+        setTimeout(() => setAstStatus('idle'), 3000);
+      }
+      
+      const context = contextParts.join('\n\n');
 
       const requestBody = {
         messages: [
@@ -665,6 +726,67 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
         onReject={handleRejectCode}
       />
 
+      {/* AST Analysis Toast */}
+      {astStatus !== 'idle' && (
+        <div className={cn(
+          "absolute top-16 right-4 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm transition-all animate-in fade-in slide-in-from-top-2",
+          astStatus === 'analyzing' && "bg-blue-500/90 text-white",
+          astStatus === 'done' && "bg-green-500/90 text-white",
+          astStatus === 'error' && "bg-red-500/90 text-white"
+        )}>
+          {astStatus === 'analyzing' && (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>AST 분석 중...</span>
+            </>
+          )}
+          {astStatus === 'done' && (
+            <>
+              <Check className="h-4 w-4" />
+              <span>{astResults.length}개 파일 분석 완료</span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-5 px-2 text-white hover:bg-white/20"
+                onClick={() => setShowAstPanel(true)}
+              >
+                보기
+              </Button>
+            </>
+          )}
+          {astStatus === 'error' && <span>AST 분석 실패</span>}
+        </div>
+      )}
+
+      {/* AST Results Panel */}
+      {showAstPanel && astResults.length > 0 && (
+        <div className="absolute inset-0 z-40 bg-background/95 backdrop-blur-sm flex flex-col">
+          <div className="p-4 border-b flex items-center justify-between bg-card">
+            <div className="flex items-center gap-2">
+              <Code className="h-5 w-5 text-primary" />
+              <span className="font-medium">AST 분석 결과</span>
+              <span className="text-xs text-muted-foreground">({astResults.length}개 파일)</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowAstPanel(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-auto p-4 space-y-4">
+            {astResults.map((result, idx) => (
+              <div key={idx} className="border rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-muted/50 flex items-center justify-between">
+                  <span className="text-sm font-mono">{result.filePath}</span>
+                  <span className="text-xs text-muted-foreground">{result.symbols} symbols</span>
+                </div>
+                <pre className="p-4 text-xs font-mono overflow-x-auto bg-background/50 max-h-64">
+                  {result.formatted}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-3 border-b flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-blue-500/10">
         <div className="flex items-center gap-2">
@@ -702,6 +824,22 @@ export function AIChat({ projectId, initialFile, onClose, onApplyCode }: AIChatP
             <Wand2 className="h-3 w-3" />
             {smartMode ? 'Smart' : 'Manual'}
           </Button>
+          {/* AST Results Button */}
+          {astResults.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 text-[10px] px-2 flex items-center gap-1",
+                showAstPanel && "bg-primary text-primary-foreground"
+              )}
+              onClick={() => setShowAstPanel(!showAstPanel)}
+              title="AST 분석 결과 보기"
+            >
+              <Code className="h-3 w-3" />
+              AST ({astResults.length})
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

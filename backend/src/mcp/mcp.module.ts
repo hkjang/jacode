@@ -3,6 +3,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { McpHostService } from './services/mcp-host.service';
 import { ToolRegistryService } from './services/tool-registry.service';
 import { PermissionService } from './services/permission.service';
+import { MCPClientService } from './services/mcp-client.service';
 import { FileSystemTool } from './tools/filesystem.tool';
 import { GitTool } from './tools/git.tool';
 import { CodeSearchTool } from './tools/code-search.tool';
@@ -28,6 +29,7 @@ import { CircuitBreakerService } from '../ai/services/circuit-breaker.service';
     McpHostService,
     ToolRegistryService,
     PermissionService,
+    MCPClientService,
     // Core tools
     FileSystemTool,
     GitTool,
@@ -50,6 +52,7 @@ import { CircuitBreakerService } from '../ai/services/circuit-breaker.service';
   exports: [
     McpHostService,
     ToolRegistryService,
+    MCPClientService,
   ],
 })
 export class McpModule implements OnModuleInit {

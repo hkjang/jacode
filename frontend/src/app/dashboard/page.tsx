@@ -280,6 +280,9 @@ export default function DashboardPage() {
                 {t('admin.dashboard')}
               </Button>
             )}
+            <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/agent')}>
+              🤖 AI Agent
+            </Button>
             <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-full">
                 <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
                     {user?.name?.[0]?.toUpperCase() || 'U'}

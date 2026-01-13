@@ -28,6 +28,7 @@ export interface ChatOptions {
   stream?: boolean;
   stop?: string[];
   tools?: any[]; // Tool definitions (JSON Schema)
+  effort?: number; // vLLM effort parameter (0.0-1.0)
 }
 
 /**
